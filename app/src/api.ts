@@ -113,6 +113,7 @@ export interface Song {
   arranger: string | null
   key: string | null
   status: SongStatus
+  kind: SongKind
   difficulty: Difficulty | null
   tags: string[]
   files: Partial<Record<FileKind, { size: number; uploadedAt: string }>>
@@ -138,11 +139,20 @@ export interface SongInput {
   arranger?: string | null
   key?: string | null
   status?: SongStatus
+  kind?: SongKind
   difficulty?: Difficulty | null
   tags?: string[]
 }
 
 export type Difficulty = 'easy' | 'medium' | 'hard'
+
+/** A full song, or a barbershop tag (the short ringing phrase). Not related to genre/mood labels. */
+export type SongKind = 'song' | 'tag'
+
+export const KINDS: { value: SongKind; label: string; plural: string }[] = [
+  { value: 'song', label: 'Full song', plural: 'Full songs' },
+  { value: 'tag', label: 'Tag', plural: 'Tags' },
+]
 
 export const DIFFICULTIES: { value: Difficulty; label: string }[] = [
   { value: 'easy', label: 'Easy' },
@@ -150,9 +160,13 @@ export const DIFFICULTIES: { value: Difficulty; label: string }[] = [
   { value: 'hard', label: 'Hard' },
 ]
 
-/** "Easy · christmas, upbeat" (or just one of the two, or empty). */
-export function songTagLine(song: { difficulty: Difficulty | null; tags: string[] }): string {
+/**
+ * Full songs: "Medium · christmas, upbeat". Barbershop tags: "Tag · Medium, christmas, upbeat"
+ * (one middle dot per line either way).
+ */
+export function songTagLine(song: { kind: SongKind; difficulty: Difficulty | null; tags: string[] }): string {
   const level = DIFFICULTIES.find((d) => d.value === song.difficulty)?.label
+  if (song.kind === 'tag') return ['Tag', [level, ...song.tags].filter(Boolean).join(', ')].filter(Boolean).join(' · ')
   return [level, song.tags.join(', ')].filter(Boolean).join(' · ')
 }
 

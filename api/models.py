@@ -113,6 +113,7 @@ class InviteResponse(BaseModel):
 
 SongStatus = Literal["learning", "performing", "retired"]
 Difficulty = Literal["easy", "medium", "hard"]
+SongKind = Literal["song", "tag"]  # a full song, or a barbershop tag (short ending phrase)
 MAX_TAGS = 10
 TAG_PATTERN = re.compile(r"^[a-z0-9][a-z0-9 &'-]{0,29}$")
 
@@ -144,6 +145,7 @@ class Song(BaseModel):
     arranger: str | None = Field(default=None, max_length=120)
     key: str | None = Field(default=None, max_length=20)
     status: SongStatus = "learning"
+    kind: SongKind = "song"
     difficulty: Difficulty | None = None
     tags: list[str] = []
     files: dict[FileKind, SongFile] = {}
@@ -155,6 +157,7 @@ class SongCreate(Request):
     arranger: str | None = Field(default=None, max_length=120)
     key: str | None = Field(default=None, max_length=20)
     status: SongStatus = "learning"
+    kind: SongKind = "song"
     difficulty: Difficulty | None = None
     tags: list[str] = Field(default_factory=list, max_length=50)
 
@@ -169,10 +172,11 @@ class SongUpdate(Request):
     arranger: str | None = Field(default=None, max_length=120)
     key: str | None = Field(default=None, max_length=20)
     status: SongStatus | None = None
+    kind: SongKind | None = None
     difficulty: Difficulty | None = None  # null clears it
     tags: list[str] | None = Field(default=None, max_length=50)
 
-    @field_validator("title", "status", "tags")
+    @field_validator("title", "status", "kind", "tags")
     @classmethod
     def not_null(cls, v):
         if v is None:

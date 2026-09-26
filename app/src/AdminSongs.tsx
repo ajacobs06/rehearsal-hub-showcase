@@ -3,6 +3,7 @@ import {
   ApiError,
   FILE_LABEL,
   DIFFICULTIES,
+  KINDS,
   STATUS_LABEL,
   UPLOAD_ERROR,
   normaliseTag,
@@ -10,6 +11,7 @@ import {
   songsApi,
   type Difficulty,
   type FileKind,
+  type SongKind,
   type Song,
   type SongStatus,
 } from './api'
@@ -209,6 +211,7 @@ export function DetailsForm({ song, onChange }: { song: Song; onChange: (s: Song
   const [arranger, setArranger] = useState(song.arranger ?? '')
   const [key, setKey] = useState(song.key ?? '')
   const [status, setStatus] = useState<SongStatus>(song.status)
+  const [kind, setKind] = useState<SongKind>(song.kind)
   const [difficulty, setDifficulty] = useState<Difficulty | ''>(song.difficulty ?? '')
   const [tags, setTags] = useState<string[]>(song.tags)
   const knownTags = useKnownTags()
@@ -226,13 +229,14 @@ export function DetailsForm({ song, onChange }: { song: Song; onChange: (s: Song
           arranger: arranger || null,
           key: key || null,
           status,
+          kind,
           difficulty: difficulty || null,
           tags,
         }),
       )
       setMessage({ kind: 'ok', text: 'Saved.' })
     } catch {
-      setMessage({ kind: 'error', text: "Couldn't save. Check the title and tags and try again." })
+      setMessage({ kind: 'error', text: "Couldn't save. Check the title and labels and try again." })
     } finally {
       setBusy(false)
     }
@@ -260,6 +264,16 @@ export function DetailsForm({ song, onChange }: { song: Song; onChange: (s: Song
             <option value="learning">Learning</option>
             <option value="performing">Performing</option>
             <option value="retired">Retired (hidden from members)</option>
+          </select>
+        </label>
+        <label>
+          Type
+          <select value={kind} onChange={(e) => setKind(e.target.value as SongKind)}>
+            {KINDS.map((k) => (
+              <option key={k.value} value={k.value}>
+                {k.label}
+              </option>
+            ))}
           </select>
         </label>
         <label>
@@ -424,7 +438,7 @@ function useKnownTags(): string[] {
 const MAX_TAGS = 10
 const TAG_OK = /^[a-z0-9][a-z0-9 &'-]{0,29}$/
 
-/** Genre and mood tags: type and press Enter or Add; suggestions come from tags already in use. */
+/** Genre and mood labels (stored as `tags`; unrelated to barbershop tags, which are the song Type). */
 function TagEditor({ tags, onChange, suggestions }: { tags: string[]; onChange: (t: string[]) => void; suggestions: string[] }) {
   const [draft, setDraft] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -432,9 +446,9 @@ function TagEditor({ tags, onChange, suggestions }: { tags: string[]; onChange: 
   function add() {
     const tag = normaliseTag(draft)
     if (!tag) return
-    if (!TAG_OK.test(tag)) return setError("Tags can use letters, numbers, spaces and & ' - (up to 30 characters).")
+    if (!TAG_OK.test(tag)) return setError("Use letters, numbers, spaces and & ' - (up to 30 characters).")
     if (tags.includes(tag)) return setDraft('')
-    if (tags.length >= MAX_TAGS) return setError(`A song can have up to ${MAX_TAGS} tags.`)
+    if (tags.length >= MAX_TAGS) return setError(`A song can have up to ${MAX_TAGS} genre and mood labels.`)
     onChange([...tags, tag])
     setDraft('')
     setError(null)
@@ -442,7 +456,7 @@ function TagEditor({ tags, onChange, suggestions }: { tags: string[]; onChange: 
 
   return (
     <div className="wide tag-editor">
-      <label htmlFor="tag-input">Tags</label>
+      <label htmlFor="tag-input">Genre and mood</label>
       <span className="tag-input">
         <input
           id="tag-input"
@@ -464,7 +478,7 @@ function TagEditor({ tags, onChange, suggestions }: { tags: string[]; onChange: 
         </button>
       </span>
       <span className="hint" id="tag-hint">
-        Genre or mood, e.g. christmas, upbeat, ballad. Press Enter or Add.
+        e.g. christmas, upbeat, ballad. Press Enter or Add.
       </span>
       <datalist id="known-tags">
         {suggestions
@@ -474,13 +488,13 @@ function TagEditor({ tags, onChange, suggestions }: { tags: string[]; onChange: 
           ))}
       </datalist>
       {tags.length > 0 && (
-        <ul className="chips tag-list" aria-label="Tags on this song">
+        <ul className="chips tag-list" aria-label="Genre and mood on this song">
           {tags.map((t) => (
             <li key={t}>
               <button
                 type="button"
                 className="chip"
-                aria-label={`Remove tag ${t}`}
+                aria-label={`Remove ${t}`}
                 onClick={() => onChange(tags.filter((x) => x !== t))}
               >
                 {t} <span aria-hidden="true">×</span>

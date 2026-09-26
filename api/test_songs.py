@@ -417,3 +417,32 @@ def test_members_cannot_tag_songs(env) -> None:
     res = client.patch(f"/api/songs/{song['id']}", headers=env["member"], json={"tags": ["mine"]})
     assert res.status_code == 403
     assert env["songs"].get(song["id"])["tags"] == []
+
+
+# ---------- Type: full song or barbershop tag ----------
+
+
+def test_type_defaults_to_full_song(env) -> None:
+    assert make_song(env)["kind"] == "song"
+    # Songs stored before the field existed read as full songs.
+    env["songs"].upsert({k: v for k, v in env["songs"].list_all()[0].items() if k != "kind"})
+    assert client.get("/api/songs", headers=env["member"]).json()[0]["kind"] == "song"
+
+
+def test_set_and_change_type(env) -> None:
+    song = make_song(env, title="Tag: Goodbye My Coney Island Baby", kind="tag")
+    assert song["kind"] == "tag"
+    res = client.patch(f"/api/songs/{song['id']}", headers=env["admin"], json={"kind": "song"})
+    assert res.json()["kind"] == "song"
+
+
+@pytest.mark.parametrize("body", [{"kind": "medley"}, {"kind": None}, {"kind": "Tag"}])
+def test_type_rejects_bad_input(env, body: dict) -> None:
+    song = make_song(env)
+    assert client.patch(f"/api/songs/{song['id']}", headers=env["admin"], json=body).status_code == 422
+    assert env["songs"].get(song["id"])["kind"] == "song"
+
+
+def test_members_cannot_change_type(env) -> None:
+    song = make_song(env)
+    assert client.patch(f"/api/songs/{song['id']}", headers=env["member"], json={"kind": "tag"}).status_code == 403
