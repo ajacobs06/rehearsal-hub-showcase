@@ -78,6 +78,24 @@ export const api = {
 // ---------- Songs ----------
 
 export type SongStatus = 'learning' | 'performing' | 'retired'
+export type LearnState = 'not_started' | 'learning' | 'learned' | 'ready'
+
+export const STATES: { value: LearnState; label: string }[] = [
+  { value: 'not_started', label: 'Not started' },
+  { value: 'learning', label: 'Learning' },
+  { value: 'learned', label: 'Learned' },
+  { value: 'ready', label: 'Ready' },
+]
+
+export const STATE_LABEL: Record<LearnState, string> = {
+  not_started: 'Not started',
+  learning: 'Learning',
+  learned: 'Learned',
+  ready: 'Ready',
+}
+
+/** Learned counts include performance-ready. */
+export const isLearned = (s: LearnState) => s === 'learned' || s === 'ready'
 export type FileKind = Part | 'full' | 'score'
 
 export interface Song {
@@ -91,6 +109,17 @@ export interface Song {
   /** The part the signed-in member is learning for this song: their per-song choice, else their usual part. */
   myPart: Part | null
   partOverride: boolean
+  myState: LearnState
+}
+
+export interface Tracker {
+  songs: { id: string; title: string; status: SongStatus }[]
+  members: { id: string; name: string; part: Part | null }[]
+  entries: { songId: string; memberId: string; part: Part | null; state: LearnState }[]
+}
+
+export const trackerApi = {
+  get: () => request<Tracker>('/api/tracker'),
 }
 
 export interface SongInput {
@@ -138,6 +167,8 @@ export const songsApi = {
     request<FileLink>(`/api/songs/${encodeURIComponent(id)}/files/${kind}${download ? '?download=true' : ''}`),
   setMyPart: (id: string, part: Part | null) =>
     request<Song>(`/api/songs/${encodeURIComponent(id)}/my-part`, { method: 'PUT', body: { part } }),
+  setMyState: (id: string, state: LearnState) =>
+    request<Song>(`/api/songs/${encodeURIComponent(id)}/my-state`, { method: 'PUT', body: { state } }),
   removeFile: (id: string, kind: FileKind) =>
     request<Song>(`/api/songs/${encodeURIComponent(id)}/files/${kind}`, { method: 'DELETE' }),
 

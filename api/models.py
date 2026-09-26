@@ -121,13 +121,46 @@ class FileLink(BaseModel):
     expiresAt: str
 
 
+LearnState = Literal["not_started", "learning", "learned", "ready"]
+
+
 class SongView(Song):
-    """A song as seen by one member: the part they are learning for it."""
+    """A song as seen by one member: the part they are learning for it and how far they've got."""
 
     myPart: Part | None = None
     partOverride: bool = False
+    myState: LearnState = "not_started"
 
 
 class MyPartRequest(Request):
     # Required key; null means "go back to my usual part".
     part: Part | None
+
+
+class MyStateRequest(Request):
+    state: LearnState
+
+
+class TrackerSong(BaseModel):
+    id: str
+    title: str
+    status: SongStatus
+
+
+class TrackerMember(BaseModel):
+    id: str
+    name: str
+    part: Part | None
+
+
+class TrackerEntry(BaseModel):
+    songId: str
+    memberId: str
+    part: Part | None  # the part this member sings for this song
+    state: LearnState
+
+
+class Tracker(BaseModel):
+    songs: list[TrackerSong]
+    members: list[TrackerMember]
+    entries: list[TrackerEntry]  # one per active member x non-retired song

@@ -10,6 +10,7 @@ from models import (
     FileLink,
     Member,
     MyPartRequest,
+    MyStateRequest,
     Song,
     SongCreate,
     SongFile,
@@ -59,11 +60,34 @@ def progress_id(member_id: str, song_id: str) -> str:
     return f"{member_id}:{song_id}"
 
 
+def view_from(song: Song, member: Member, doc: dict | None) -> SongView:
+    """The song plus this member's part for it (per-song choice, else usual part) and learned state."""
+    doc = doc or {}
+    override = doc.get("part")
+    return SongView(
+        **song.model_dump(),
+        myPart=override or member.part,
+        partOverride=override is not None,
+        myState=doc.get("state") or "not_started",
+    )
+
+
 def view(song: Song, member: Member, progress: DocStore) -> SongView:
-    """The song plus the part this member is learning for it (per-song choice, else usual part)."""
-    doc = progress.get(progress_id(member.id, song.id), partition=song.id)
-    override = doc.get("part") if doc else None
-    return SongView(**song.model_dump(), myPart=override or member.part, partOverride=override is not None)
+    return view_from(song, member, progress.get(progress_id(member.id, song.id), partition=song.id))
+
+
+def load_progress(progress: DocStore, member: Member, song_id: str) -> dict:
+    pid = progress_id(member.id, song_id)
+    return progress.get(pid, partition=song_id) or {"id": pid, "memberId": member.id, "songId": song_id}
+
+
+def save_progress(progress: DocStore, doc: dict) -> None:
+    """Store the doc, or delete it when it holds nothing (no per-song part, not started)."""
+    doc = {**doc, "updatedAt": now()}
+    if not doc.get("part") and (doc.get("state") or "not_started") == "not_started":
+        progress.delete(doc["id"], partition=doc["songId"])
+    else:
+        progress.upsert(doc)
 
 
 def save(store: DocStore, song: Song, changes: dict) -> Song:
@@ -85,15 +109,8 @@ def list_songs(
     songs = [Song(**d) for d in store.list_all()]
     if not is_admin(member):
         songs = [s for s in songs if s.status != "retired"]
-    overrides = {d["songId"]: d["part"] for d in progress.find("memberId", member.id) if d.get("part")}
-    views = [
-        SongView(
-            **s.model_dump(),
-            myPart=overrides.get(s.id) or member.part,
-            partOverride=s.id in overrides,
-        )
-        for s in songs
-    ]
+    mine = {d["songId"]: d for d in progress.find("memberId", member.id)}
+    views = [view_from(s, member, mine.get(s.id)) for s in songs]
     return sorted(views, key=lambda s: (STATUS_ORDER[s.status], s.title.lower()))
 
 
@@ -117,14 +134,22 @@ def set_my_part(
 ) -> SongView:
     """Learn a different part for one song. null (or your usual part) removes the per-song choice."""
     song = load_song(store, song_id, member)
-    pid = progress_id(member.id, song_id)
-    doc = progress.get(pid, partition=song_id) or {"id": pid, "memberId": member.id, "songId": song_id}
     part = body.part if body.part != member.part else None
-    doc = {**doc, "part": part, "updatedAt": now()}
-    if part is None and set(doc) <= {"id", "memberId", "songId", "part", "updatedAt"}:
-        progress.delete(pid, partition=song_id)  # nothing else recorded for this song yet
-    else:
-        progress.upsert(doc)
+    save_progress(progress, {**load_progress(progress, member, song_id), "part": part})
+    return view(song, member, progress)
+
+
+@router.put("/{song_id}/my-state")
+def set_my_state(
+    song_id: str,
+    body: MyStateRequest,
+    member: Member = Depends(current_member),
+    store: DocStore = Depends(get_song_store),
+    progress: DocStore = Depends(get_progress_store),
+) -> SongView:
+    """How far the member has got with this song: not_started, learning, learned or ready."""
+    song = load_song(store, song_id, member)
+    save_progress(progress, {**load_progress(progress, member, song_id), "state": body.state})
     return view(song, member, progress)
 
 

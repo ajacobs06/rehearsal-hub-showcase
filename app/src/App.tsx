@@ -3,6 +3,7 @@ import { ApiError, api, signInUrl, signOutUrl, type Member } from './api'
 import Home from './Home'
 import Members from './Members'
 import SongPage from './SongPage'
+import Tracker from './Tracker'
 
 type Session =
   | { kind: 'loading' }
@@ -97,7 +98,8 @@ export default function App() {
   const { member } = session
   const isAdmin = member.role !== 'member'
   const songId = path.match(/^\/songs\/([A-Za-z0-9]+)$/)?.[1]
-  const view = isAdmin && path === '/members' ? 'members' : songId ? 'song' : 'home'
+  const view =
+    isAdmin && path === '/members' ? 'members' : isAdmin && path === '/tracker' ? 'tracker' : songId ? 'song' : 'home'
 
   const link = (to: string, label: string, active: boolean) => (
     <a
@@ -126,7 +128,8 @@ export default function App() {
           Rehearsal Hub
         </a>
         <nav>
-          {isAdmin && link('/', 'Home', view === 'home')}
+          {isAdmin && <span className="nav-home">{link('/', 'Home', view === 'home')}</span>}
+          {isAdmin && link('/tracker', 'Tracker', view === 'tracker')}
           {isAdmin && link('/members', 'Members', view === 'members')}
           <a href={signOutUrl}>Sign out</a>
         </nav>
@@ -134,6 +137,8 @@ export default function App() {
       <main className="page">
         {view === 'members' ? (
           <Members me={member} />
+        ) : view === 'tracker' ? (
+          <Tracker />
         ) : view === 'song' && songId ? (
           <SongPage key={songId} id={songId} me={member} navigate={navigate} />
         ) : (

@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { FILE_LABEL, STATUS_LABEL, songsApi, type Member, type Song, type SongStatus } from './api'
+import { FILE_LABEL, STATE_LABEL, STATUS_LABEL, songsApi, type Member, type Song, type SongStatus } from './api'
 
 const GROUPS: SongStatus[] = ['learning', 'performing', 'retired']
 
@@ -53,7 +53,12 @@ export default function Songs({ me, navigate }: { me: Member; navigate: (to: str
                         navigate(`/songs/${s.id}`)
                       }}
                     >
-                      <span className="song-title">{s.title}</span>
+                      <span className="song-head">
+                        <span className="song-title">{s.title}</span>
+                        {s.myState !== 'not_started' && (
+                          <span className={`badge state-${s.myState}`}>{STATE_LABEL[s.myState]}</span>
+                        )}
+                      </span>
                       {s.arranger && <span className="muted small">{s.arranger}</span>}
                       {s.myPart && (
                         <span className={`small ${s.files[s.myPart] ? 'ready' : 'muted'}`}>

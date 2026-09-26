@@ -3,10 +3,12 @@ import {
   ApiError,
   FILE_LABEL,
   PARTS,
+  STATES,
   STATUS_LABEL,
   UPLOAD_ERROR,
   songsApi,
   type FileKind,
+  type LearnState,
   type Member,
   type Part,
   type Song,
@@ -74,6 +76,7 @@ export default function SongPage({ id, me, navigate }: { id: string; me: Member;
       </div>
 
       <PartPanel song={song} usual={me.part} onChange={setSong} />
+      <ProgressPanel song={song} onChange={setSong} />
 
       {others.length > 0 && (
         <section>
@@ -178,6 +181,44 @@ function PartPanel({ song, usual, onChange }: { song: Song; usual: Part | null; 
         part && <p className="muted">No {FILE_LABEL[part]} track yet.</p>
       )}
       {error && <p className="error small">Couldn't change your part. Try again.</p>}
+    </section>
+  )
+}
+
+function ProgressPanel({ song, onChange }: { song: Song; onChange: (s: Song) => void }) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(false)
+
+  async function choose(state: LearnState) {
+    setBusy(true)
+    setError(false)
+    try {
+      onChange(await songsApi.setMyState(song.id, state))
+    } catch {
+      setError(true)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <section className="panel">
+      <h2>Your progress</h2>
+      <div className="segmented states" role="group" aria-label="Your progress on this song">
+        {STATES.map((s) => (
+          <button
+            key={s.value}
+            className={s.value === song.myState ? 'selected' : undefined}
+            aria-pressed={s.value === song.myState}
+            disabled={busy}
+            onClick={() => choose(s.value)}
+          >
+            {s.label}
+          </button>
+        ))}
+      </div>
+      <p className="muted small hint-below">Ready means you could perform it tomorrow.</p>
+      {error && <p className="error small">Couldn't save your progress. Try again.</p>}
     </section>
   )
 }

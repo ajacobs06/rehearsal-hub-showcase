@@ -11,12 +11,14 @@ from mailer import Mailer, get_mailer
 from models import ROLE_RANK, InviteRequest, InviteResponse, MeUpdate, Member, MemberUpdate, Role
 from songs import router as songs_router
 from store import DocStore, get_progress_store, get_store
+from tracker import router as tracker_router
 
 # The React build is copied here at deploy time (see .github/workflows/deploy.yml).
 STATIC_DIR = (Path(__file__).parent / "static").resolve()
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 app.include_router(songs_router)
+app.include_router(tracker_router)
 
 
 @app.get("/api/health")

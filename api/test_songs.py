@@ -268,3 +268,85 @@ def test_admin_responses_keep_my_part(env) -> None:
     song = make_song(env)
     res = client.patch(f"/api/songs/{song['id']}", headers=env["admin"], json={"key": "F"})
     assert res.json()["myPart"] == "lead"
+
+
+# ---------- Learned state ----------
+
+
+def my_state(env, song_id: str, who: str = "member") -> str:
+    return client.get(f"/api/songs/{song_id}", headers=env[who]).json()["myState"]
+
+
+def test_state_defaults_to_not_started(env) -> None:
+    song = make_song(env)
+    assert my_state(env, song["id"]) == "not_started"
+
+
+def test_set_state(env) -> None:
+    song = make_song(env)
+    res = client.put(f"/api/songs/{song['id']}/my-state", headers=env["member"], json={"state": "learned"})
+    assert res.json()["myState"] == "learned"
+    assert my_state(env, song["id"]) == "learned"
+    assert my_state(env, song["id"], who="admin") == "not_started"
+    listed = client.get("/api/songs", headers=env["member"]).json()
+    assert listed[0]["myState"] == "learned"
+
+
+def test_state_and_part_share_one_record(env) -> None:
+    song = make_song(env)
+    client.put(f"/api/songs/{song['id']}/my-part", headers=env["member"], json={"part": "bass"})
+    client.put(f"/api/songs/{song['id']}/my-state", headers=env["member"], json={"state": "learning"})
+    # Going back to the usual part keeps the state.
+    res = client.put(f"/api/songs/{song['id']}/my-part", headers=env["member"], json={"part": None})
+    assert (res.json()["myPart"], res.json()["myState"]) == ("lead", "learning")
+    assert len(env["progress"].list_all()) == 1
+
+
+def test_not_started_without_part_leaves_no_record(env) -> None:
+    song = make_song(env)
+    client.put(f"/api/songs/{song['id']}/my-state", headers=env["member"], json={"state": "learning"})
+    client.put(f"/api/songs/{song['id']}/my-state", headers=env["member"], json={"state": "not_started"})
+    assert env["progress"].list_all() == []
+
+
+@pytest.mark.parametrize("body", [{"state": "mastered"}, {"state": None}, {}, {"state": "learned", "memberId": "x"}])
+def test_state_rejects_bad_input(env, body: dict) -> None:
+    song = make_song(env)
+    assert client.put(f"/api/songs/{song['id']}/my-state", headers=env["member"], json=body).status_code == 422
+    assert env["progress"].list_all() == []
+
+
+def test_state_on_retired_song_is_404(env) -> None:
+    song = make_song(env, status="retired")
+    res = client.put(f"/api/songs/{song['id']}/my-state", headers=env["member"], json={"state": "learned"})
+    assert res.status_code == 404
+
+
+def test_state_requires_sign_in(env) -> None:
+    song = make_song(env)
+    assert client.put(f"/api/songs/{song['id']}/my-state", json={"state": "learned"}).status_code == 401
+
+
+# ---------- Tracker ----------
+
+
+def test_tracker_is_admin_only(env) -> None:
+    assert client.get("/api/tracker", headers=env["member"]).status_code == 403
+    assert client.get("/api/tracker").status_code == 401
+
+
+def test_tracker_entries_use_per_song_part_and_state(env) -> None:
+    lida, medley = make_song(env, title="Lida Rose"), make_song(env, title="Hunchback Medley")
+    make_song(env, title="Old Song", status="retired")
+    client.put(f"/api/songs/{medley['id']}/my-part", headers=env["member"], json={"part": "bass"})
+    client.put(f"/api/songs/{medley['id']}/my-state", headers=env["member"], json={"state": "ready"})
+    client.post("/api/members", headers=env["admin"], json={"email": "new@example.com", "name": "Invitee"})
+
+    t = client.get("/api/tracker", headers=env["admin"]).json()
+    assert [s["title"] for s in t["songs"]] == ["Hunchback Medley", "Lida Rose"]
+    assert [m["name"] for m in t["members"]] == ["Admin", "M"]  # invited people aren't counted
+    entries = {(e["songId"], e["memberId"]): (e["part"], e["state"]) for e in t["entries"]}
+    member_id = "google:sub-m@example.com"
+    assert entries[(medley["id"], member_id)] == ("bass", "ready")
+    assert entries[(lida["id"], member_id)] == ("lead", "not_started")
+    assert len(t["entries"]) == 4
