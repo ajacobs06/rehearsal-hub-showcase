@@ -20,8 +20,9 @@ from models import (
     Song,
     SongParts,
 )
+from groups import can_see, check_groups
 from songs import is_admin
-from store import DocStore, get_progress_store, get_rehearsal_store, get_song_store, get_store
+from store import DocStore, get_group_store, get_progress_store, get_rehearsal_store, get_song_store, get_store
 
 router = APIRouter(prefix="/api/rehearsals")
 
@@ -38,9 +39,10 @@ def finishes(r: Rehearsal) -> datetime:
     return r.end or r.start + DEFAULT_LENGTH
 
 
-def load(store: DocStore, rehearsal_id: str) -> Rehearsal:
+def load(store: DocStore, rehearsal_id: str, me: Member) -> Rehearsal:
     doc = store.get(rehearsal_id)
-    if doc is None:
+    # Rehearsals for groups you're not in answer 404 rather than revealing they exist.
+    if doc is None or not can_see(doc.get("groups", []), me):
         raise HTTPException(404)
     return Rehearsal(**doc)
 
@@ -71,7 +73,12 @@ def build_view(
         for s in plan
     ]
 
-    active = [Member(**d) for d in members.list_all() if d["status"] == "active"]
+    # Only the rehearsal's audience counts (everyone, or the members of its groups).
+    active = [
+        m
+        for m in (Member(**d) for d in members.list_all() if d["status"] == "active")
+        if not r.groups or set(r.groups) & set(m.groups)
+    ]
     counts = RsvpCounts()
     for m in active:
         rsvp = r.rsvps.get(m.id)
@@ -87,6 +94,7 @@ def build_view(
         venue=r.venue,
         notes=r.notes,
         songs=song_views,
+        groups=r.groups,
         myRsvp=r.rsvps[me.id].response if me.id in r.rsvps else None,
         rsvpOpen=utcnow() < finishes(r),
         counts=counts,
@@ -130,7 +138,7 @@ def list_rehearsals(
     progress: DocStore = Depends(get_progress_store),
 ) -> list[RehearsalView]:
     now_ = utcnow()
-    all_ = [Rehearsal(**d) for d in store.list_all()]
+    all_ = [Rehearsal(**d) for d in store.list_all() if can_see(d.get("groups", []), me)]
     if when == "upcoming":
         chosen = sorted((r for r in all_ if finishes(r) > now_), key=lambda r: r.start)
     else:
@@ -147,7 +155,7 @@ def get_rehearsal(
     songs: DocStore = Depends(get_song_store),
     progress: DocStore = Depends(get_progress_store),
 ) -> RehearsalView:
-    return build_view(load(store, rehearsal_id), me, members, songs, progress)
+    return build_view(load(store, rehearsal_id, me), me, members, songs, progress)
 
 
 # ---------- RSVP ----------
@@ -163,7 +171,7 @@ def rsvp(
     songs: DocStore = Depends(get_song_store),
     progress: DocStore = Depends(get_progress_store),
 ) -> RehearsalView:
-    r = load(store, rehearsal_id)
+    r = load(store, rehearsal_id, me)
     if utcnow() >= finishes(r):
         raise HTTPException(400, detail={"reason": "rsvp_closed"})
     # Patch only this member's entry, so simultaneous RSVPs can't overwrite each other.
@@ -187,8 +195,10 @@ def create_rehearsal(
     members: DocStore = Depends(get_store),
     songs: DocStore = Depends(get_song_store),
     progress: DocStore = Depends(get_progress_store),
+    groups: DocStore = Depends(get_group_store),
 ) -> RehearsalView:
     check_songs(songs, body.songIds)
+    check_groups(groups, body.groups)
     r = Rehearsal(id=uuid.uuid4().hex, createdAt=now(), rsvps={}, **body.model_dump())
     store.upsert(r.model_dump(mode="json"))
     return build_view(r, admin, members, songs, progress)
@@ -203,11 +213,14 @@ def update_rehearsal(
     members: DocStore = Depends(get_store),
     songs: DocStore = Depends(get_song_store),
     progress: DocStore = Depends(get_progress_store),
+    groups: DocStore = Depends(get_group_store),
 ) -> RehearsalView:
-    current = load(store, rehearsal_id)
+    current = load(store, rehearsal_id, admin)
     changes = body.model_dump(exclude_unset=True, mode="json")
     if "songIds" in changes:
         check_songs(songs, changes["songIds"])
+    if "groups" in changes:
+        check_groups(groups, changes["groups"])
     # Validate the merged record, then patch only the changed fields so RSVPs made meanwhile survive.
     try:
         Rehearsal.model_validate({**current.model_dump(mode="json"), **changes})
@@ -222,8 +235,8 @@ def update_rehearsal(
 @router.delete("/{rehearsal_id}", status_code=204)
 def delete_rehearsal(
     rehearsal_id: str,
-    _: Member = Depends(require_role("admin")),
+    admin: Member = Depends(require_role("admin")),
     store: DocStore = Depends(get_rehearsal_store),
 ) -> None:
-    load(store, rehearsal_id)
+    load(store, rehearsal_id, admin)
     store.delete(rehearsal_id)

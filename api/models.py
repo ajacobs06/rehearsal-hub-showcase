@@ -17,8 +17,10 @@ class Member(BaseModel):
     email: str
     name: str = Field(min_length=1, max_length=100)
     part: Part | None = None
+    # Derived: owner stays owner; otherwise admin exactly when in the committee group.
     role: Role = "member"
     status: Status
+    groups: list[str] = []
     createdAt: str
 
 
@@ -28,11 +30,20 @@ class Request(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
 
+def _dedupe_ids(ids: list[str]) -> list[str]:
+    return list(dict.fromkeys(ids))
+
+
 class InviteRequest(Request):
     email: EmailStr
     name: str = Field(min_length=1, max_length=100)
     part: Part | None = None
-    role: Role = "member"
+    groups: list[str] = Field(default_factory=list, max_length=50)
+
+    @field_validator("groups")
+    @classmethod
+    def dedupe_groups(cls, v: list[str]) -> list[str]:
+        return _dedupe_ids(v)
 
 
 class MeUpdate(Request):
@@ -52,15 +63,35 @@ class MeUpdate(Request):
 class MemberUpdate(Request):
     name: str | None = Field(default=None, min_length=1, max_length=100)
     part: Part | None = None
-    role: Role | None = None
+    groups: list[str] | None = Field(default=None, max_length=50)
+    owner: bool | None = None  # owners only
 
-    @field_validator("name", "role")
+    @field_validator("name", "groups", "owner")
     @classmethod
-    def not_null(cls, v: str | None) -> str:
+    def not_null(cls, v):
         # Omit a field to leave it unchanged; an explicit null is an error (part may be null).
         if v is None:
             raise ValueError("cannot be null")
-        return v
+        return _dedupe_ids(v) if isinstance(v, list) else v
+
+
+class Group(BaseModel):
+    id: str
+    name: str
+    kind: Literal["fixed", "quartet"]
+    memberCount: int = 0
+
+
+class GroupCreate(Request):
+    name: str = Field(min_length=1, max_length=60)
+
+
+class GroupUpdate(Request):
+    name: str = Field(min_length=1, max_length=60)
+
+
+class GroupMembers(Request):
+    memberIds: list[str] = Field(max_length=500)
 
 
 class InviteResponse(BaseModel):
@@ -198,6 +229,7 @@ class Rehearsal(BaseModel):
     venue: str = Field(min_length=1, max_length=120)
     notes: str | None = Field(default=None, max_length=2000)
     songIds: list[str] = Field(default_factory=list, max_length=30)
+    groups: list[str] = []  # empty = everyone
     rsvps: dict[str, Rsvp] = {}
     createdAt: str
 
@@ -213,10 +245,11 @@ class RehearsalCreate(Request):
     venue: str = Field(min_length=1, max_length=120)
     notes: str | None = Field(default=None, max_length=2000)
     songIds: list[str] = Field(default_factory=list, max_length=30)
+    groups: list[str] = Field(default_factory=list, max_length=50)
 
-    @field_validator("songIds")
+    @field_validator("songIds", "groups")
     @classmethod
-    def dedupe_songs(cls, v: list[str]) -> list[str]:
+    def dedupe_ids(cls, v: list[str]) -> list[str]:
         return _dedupe(v)
 
     @model_validator(mode="after")
@@ -231,8 +264,9 @@ class RehearsalUpdate(Request):
     venue: str | None = Field(default=None, min_length=1, max_length=120)
     notes: str | None = Field(default=None, max_length=2000)
     songIds: list[str] | None = Field(default=None, max_length=30)
+    groups: list[str] | None = Field(default=None, max_length=50)
 
-    @field_validator("start", "venue", "songIds")
+    @field_validator("start", "venue", "songIds", "groups")
     @classmethod
     def not_null(cls, v):
         # Omit a field to leave it unchanged; end and notes may be cleared with null.
@@ -289,6 +323,7 @@ class RehearsalView(BaseModel):
     venue: str
     notes: str | None
     songs: list[RehearsalSong]
+    groups: list[str]
     myRsvp: RsvpResponse | None
     rsvpOpen: bool
     counts: RsvpCounts

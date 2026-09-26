@@ -33,6 +33,7 @@ export default function Schedule({ me, navigate }: { me: Member; navigate: (to: 
           <>
             <h2>Add a rehearsal</h2>
             <RehearsalForm
+              me={me}
               submitLabel="Add rehearsal"
               onCancel={() => setAdding(false)}
               onSubmit={async (body) => navigate(`/rehearsals/${(await rehearsalsApi.create(body)).id}`)}

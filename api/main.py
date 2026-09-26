@@ -11,7 +11,9 @@ from mailer import Mailer, get_mailer
 from models import ROLE_RANK, InviteRequest, InviteResponse, MeUpdate, Member, MemberUpdate, Role
 from rehearsals import router as rehearsals_router
 from songs import router as songs_router
-from store import DocStore, get_progress_store, get_rehearsal_store, get_store
+from groups import check_groups, derived_role, require_owner_for_committee
+from groups import router as groups_router
+from store import DocStore, get_group_store, get_progress_store, get_rehearsal_store, get_store
 from tracker import router as tracker_router
 
 # The React build is copied here at deploy time (see .github/workflows/deploy.yml).
@@ -21,6 +23,7 @@ app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 app.include_router(songs_router)
 app.include_router(tracker_router)
 app.include_router(rehearsals_router)
+app.include_router(groups_router)
 
 
 @app.get("/api/health")
@@ -79,10 +82,11 @@ def invite_member(
     body: InviteRequest,
     actor: Member = Depends(require_role("admin")),
     store: DocStore = Depends(get_store),
+    groups: DocStore = Depends(get_group_store),
     mailer: Mailer = Depends(get_mailer),
 ) -> InviteResponse:
-    if not can_manage(actor, body.role):
-        raise HTTPException(403, detail={"reason": "forbidden"})
+    check_groups(groups, body.groups)
+    require_owner_for_committee(actor, [], body.groups)
     email = body.email.strip().lower()
     if store.find("email", email):
         raise HTTPException(409, detail={"reason": "already_exists"})
@@ -91,7 +95,8 @@ def invite_member(
         email=email,
         name=body.name.strip(),
         part=body.part,
-        role=body.role,
+        role=derived_role("member", body.groups),
+        groups=body.groups,
         status="invited",
         createdAt=now(),
     )
@@ -106,19 +111,30 @@ def update_member(
     body: MemberUpdate,
     actor: Member = Depends(require_role("admin")),
     store: DocStore = Depends(get_store),
+    groups: DocStore = Depends(get_group_store),
 ) -> Member:
+    """Name/part follow the usual manage rules. Any admin may change non-committee groups for
+    anyone; committee (which grants admin) and owner status are for owners only."""
     doc = store.get(member_id)
     if doc is None:
         raise HTTPException(404)
     target = Member(**doc)
-    if not can_manage(actor, target.role):
+    changes = body.model_dump(exclude_unset=True)
+    if {"name", "part"} & changes.keys() and not can_manage(actor, target.role):
         raise HTTPException(403, detail={"reason": "forbidden"})
-    if body.role is not None and body.role != target.role:
-        if target.id == actor.id:
-            raise HTTPException(400, detail={"reason": "cannot_change_own_role"})
-        if not can_manage(actor, body.role):
+    new_groups = changes.get("groups", target.groups)
+    if "groups" in changes:
+        check_groups(groups, new_groups)
+        require_owner_for_committee(actor, target.groups, new_groups)
+    role = target.role
+    if "owner" in changes:
+        if actor.role != "owner":
             raise HTTPException(403, detail={"reason": "forbidden"})
-    updated = apply_update(target, body.model_dump(exclude_unset=True))
+        if target.id == actor.id and changes["owner"] != (target.role == "owner"):
+            raise HTTPException(400, detail={"reason": "cannot_change_own_role"})
+        role = "owner" if changes.pop("owner") else "member"
+    changes["role"] = derived_role(role, new_groups)
+    updated = apply_update(target, changes)
     store.upsert(updated.model_dump())
     return updated
 

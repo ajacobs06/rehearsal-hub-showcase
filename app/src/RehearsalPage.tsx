@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { PARTS, RSVP_OPTIONS, formatWhen, rehearsalsApi, type Member, type Rehearsal, type RsvpResponse } from './api'
-import { RehearsalForm, RsvpButtons, SongsToPrepare, countsLine, internalLink } from './Rehearsals'
+import { ForGroups, RehearsalForm, RsvpButtons, SongsToPrepare, countsLine, internalLink } from './Rehearsals'
 
 const PART_COLUMNS: { key: string; label: string }[] = [...PARTS.map((p) => ({ key: p.value, label: p.label })), { key: 'none', label: 'No part' }]
 
@@ -47,6 +47,7 @@ export default function RehearsalPage({ id, me, navigate }: { id: string; me: Me
       <div>
         <h1>{formatWhen(r.start, r.end)}</h1>
         <p className="muted">{r.venue}</p>
+        <ForGroups ids={r.groups} />
       </div>
 
       {r.notes && <p className="notes">{r.notes}</p>}
@@ -63,12 +64,13 @@ export default function RehearsalPage({ id, me, navigate }: { id: string; me: Me
       </section>
 
       {isAdmin && (
-        <section className="admin">
+        <section className="admin-section">
           <h2>Manage this rehearsal</h2>
           {r.songParts && r.songParts.length > 0 && <PartNumbers r={r} />}
           {r.attendees && <Replies r={r} />}
           {editing ? (
             <RehearsalForm
+              me={me}
               initial={r}
               submitLabel="Save changes"
               onCancel={() => setEditing(false)}

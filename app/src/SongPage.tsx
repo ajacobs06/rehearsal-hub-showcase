@@ -296,7 +296,7 @@ function AdminSong({
   onDeleted: () => void
 }) {
   return (
-    <section className="admin">
+    <section className="admin-section">
       <h2>Manage this song</h2>
       <DetailsForm song={song} onChange={onChange} />
       <div className="panel">

@@ -2,7 +2,14 @@ import pytest
 from fastapi.testclient import TestClient
 
 from main import app
-from store import InMemoryStore, get_progress_store, get_rehearsal_store, get_song_store, get_store
+from store import (
+    InMemoryStore,
+    get_group_store,
+    get_progress_store,
+    get_rehearsal_store,
+    get_song_store,
+    get_store,
+)
 from test_main import OWNER_EMAIL, add_member
 from tracks import InMemoryTrackStore, get_track_store
 
@@ -22,12 +29,15 @@ def env(monkeypatch: pytest.MonkeyPatch):
     app.dependency_overrides[get_progress_store] = lambda: progress
     rehearsals = InMemoryStore()
     app.dependency_overrides[get_rehearsal_store] = lambda: rehearsals
+    groups = InMemoryStore()
+    app.dependency_overrides[get_group_store] = lambda: groups
     app.dependency_overrides[get_track_store] = lambda: tracks
     yield {
         "members": members,
         "songs": songs,
         "progress": progress,
         "rehearsals": rehearsals,
+        "groups": groups,
         "tracks": tracks,
         "admin": add_member(members, "admin@example.com", "admin"),
         "member": add_member(members, "m@example.com", "member"),

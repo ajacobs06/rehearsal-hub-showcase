@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from auth import CLAIM_EMAIL, CLAIM_ID
 from mailer import get_mailer
 from main import app
-from store import InMemoryStore, get_progress_store, get_rehearsal_store, get_store
+from store import InMemoryStore, get_group_store, get_progress_store, get_rehearsal_store, get_store
 
 OWNER_EMAIL = "owner@example.com"
 
@@ -30,6 +30,7 @@ def store(monkeypatch: pytest.MonkeyPatch) -> InMemoryStore:
     app.dependency_overrides[get_store] = lambda: s
     app.dependency_overrides[get_progress_store] = lambda: InMemoryStore()
     app.dependency_overrides[get_rehearsal_store] = lambda: InMemoryStore()
+    app.dependency_overrides[get_group_store] = lambda: InMemoryStore()
     yield s
     app.dependency_overrides.clear()
 
@@ -206,9 +207,11 @@ def test_duplicate_invite_conflicts(store: InMemoryStore, mailer: FakeMailer) ->
 def test_admin_cannot_grant_admin_but_owner_can(store: InMemoryStore, mailer: FakeMailer) -> None:
     admin = add_member(store, "admin@example.com", "admin")
     owner = add_member(store, OWNER_EMAIL, "owner")
-    invite = {"email": "b@example.com", "name": "B", "role": "admin"}
+    invite = {"email": "b@example.com", "name": "B", "groups": ["committee"]}
     assert client.post("/api/members", headers=admin, json=invite).status_code == 403
-    assert client.post("/api/members", headers=owner, json=invite).status_code == 201
+    res = client.post("/api/members", headers=owner, json=invite)
+    assert res.status_code == 201
+    assert res.json()["member"]["role"] == "admin"
 
 
 def test_admin_cannot_modify_other_admins(store: InMemoryStore) -> None:
@@ -224,14 +227,14 @@ def test_admin_manages_members(store: InMemoryStore) -> None:
     add_member(store, "m@example.com", "member")
     target = "/api/members/google:sub-m@example.com"
     assert client.patch(target, headers=admin, json={"part": "bari"}).json()["part"] == "bari"
-    assert client.patch(target, headers=admin, json={"role": "admin"}).status_code == 403
+    assert client.patch(target, headers=admin, json={"groups": ["committee"]}).status_code == 403
     assert client.delete(target, headers=admin).status_code == 204
     assert store.get("google:sub-m@example.com") is None
 
 
 def test_admin_cannot_promote_self(store: InMemoryStore) -> None:
     admin = add_member(store, "admin@example.com", "admin")
-    res = client.patch("/api/members/google:sub-admin@example.com", headers=admin, json={"role": "owner"})
+    res = client.patch("/api/members/google:sub-admin@example.com", headers=admin, json={"owner": True})
     assert res.status_code == 403
     assert store.get("google:sub-admin@example.com")["role"] == "admin"
 
@@ -240,7 +243,8 @@ def test_admin_cannot_touch_owner(store: InMemoryStore) -> None:
     admin = add_member(store, "admin@example.com", "admin")
     add_member(store, OWNER_EMAIL, "owner")
     target = f"/api/members/google:sub-{OWNER_EMAIL}"
-    assert client.patch(target, headers=admin, json={"role": "member"}).status_code == 403
+    assert client.patch(target, headers=admin, json={"owner": False}).status_code == 403
+    assert client.patch(target, headers=admin, json={"name": "Renamed"}).status_code == 403
     assert client.delete(target, headers=admin).status_code == 403
     assert store.get(f"google:sub-{OWNER_EMAIL}")["role"] == "owner"
 
@@ -255,5 +259,5 @@ def test_member_cannot_edit_self_via_admin_endpoint(store: InMemoryStore) -> Non
 def test_owner_cannot_change_own_role_or_delete_self(store: InMemoryStore) -> None:
     owner = add_member(store, OWNER_EMAIL, "owner")
     me = f"/api/members/google:sub-{OWNER_EMAIL}"
-    assert client.patch(me, headers=owner, json={"role": "member"}).status_code == 400
+    assert client.patch(me, headers=owner, json={"owner": False}).status_code == 400
     assert client.delete(me, headers=owner).status_code == 400

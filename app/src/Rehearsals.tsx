@@ -9,9 +9,11 @@ import {
   songsApi,
   type Rehearsal,
   type RehearsalInput,
+  type Member,
   type RsvpResponse,
   type Song,
 } from './api'
+import { GroupCheckboxes, groupNames, useGroups } from './groups'
 
 type Navigate = (to: string) => void
 
@@ -113,6 +115,7 @@ export function RehearsalCard({
         <div>
           <h3 className="when">{formatWhen(r.start, r.end)}</h3>
           <p className="muted">{r.venue}</p>
+          <ForGroups ids={r.groups} />
         </div>
         <a className="button secondary small" {...internalLink(`/rehearsals/${r.id}`, navigate)}>
           Details
@@ -132,6 +135,13 @@ export function RehearsalCard({
   )
 }
 
+/** "For: Open chorus" when a rehearsal is limited to groups. */
+export function ForGroups({ ids }: { ids: string[] }) {
+  const groups = useGroups()
+  const names = groupNames(ids, groups)
+  return names ? <p className="small for-groups">For: {names}</p> : null
+}
+
 // ---------- Admin form (create and edit) ----------
 
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -148,11 +158,13 @@ function toTimeInput(iso: string): string {
 }
 
 export function RehearsalForm({
+  me,
   initial,
   submitLabel,
   onSubmit,
   onCancel,
 }: {
+  me: Member
   initial?: Rehearsal
   submitLabel: string
   onSubmit: (body: RehearsalInput) => Promise<void>
@@ -163,6 +175,8 @@ export function RehearsalForm({
   const [venue, setVenue] = useState(initial?.venue ?? '')
   const [notes, setNotes] = useState(initial?.notes ?? '')
   const [songIds, setSongIds] = useState<string[]>(initial?.songs.map((s) => s.id) ?? [])
+  const [forGroups, setForGroups] = useState<string[]>(initial?.groups ?? [])
+  const groups = useGroups()
   const [songs, setSongs] = useState<Song[] | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -188,11 +202,13 @@ export function RehearsalForm({
     }
     setBusy(true)
     try {
-      await onSubmit({ start: startDate.toISOString(), end, venue, notes: notes.trim() || null, songIds })
+      await onSubmit({ start: startDate.toISOString(), end, venue, notes: notes.trim() || null, songIds, groups: forGroups })
     } catch (err) {
       setError(
         err instanceof ApiError && err.reason === 'unknown_song'
           ? 'One of those songs no longer exists. Reload and try again.'
+          : err instanceof ApiError && err.reason === 'unknown_group'
+            ? 'One of those groups no longer exists. Reload and try again.'
           : "Couldn't save the rehearsal. Check the details and try again.",
       )
     } finally {
@@ -233,6 +249,15 @@ export function RehearsalForm({
             ))
           )}
         </fieldset>
+        <GroupCheckboxes
+          groups={groups}
+          value={forGroups}
+          onChange={setForGroups}
+          me={me}
+          legend="Who is it for?"
+          hint="Leave all unticked for everyone. Only people in the ticked groups will see it."
+          committeeLocked={false}
+        />
         <label className="wide">
           Notes
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} maxLength={2000} rows={3} />

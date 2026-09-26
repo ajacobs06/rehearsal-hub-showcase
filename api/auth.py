@@ -69,6 +69,11 @@ def current_member(
 
     existing = store.get(principal.member_id)
     if existing:
+        if "groups" not in existing:
+            # Accounts from before groups existed: admins and owners join the committee group,
+            # which is what makes someone an admin from now on.
+            existing = {**existing, "groups": ["committee"] if existing["role"] in ("admin", "owner") else []}
+            store.upsert(existing)
         return Member(**existing)
 
     # First sign-in: claim an invite for this email, or bootstrap the owner.
@@ -87,6 +92,7 @@ def current_member(
             "name": principal.name,
             "part": None,
             "role": "owner",
+            "groups": ["committee"],
             "status": "active",
             "createdAt": now(),
         }

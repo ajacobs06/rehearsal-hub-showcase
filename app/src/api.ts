@@ -8,14 +8,24 @@ export interface Member {
   part: Part | null
   role: Role
   status: 'invited' | 'active'
+  groups: string[]
   createdAt: string
 }
+
+export interface Group {
+  id: string
+  name: string
+  kind: 'fixed' | 'quartet'
+  memberCount: number
+}
+
+export const COMMITTEE = 'committee'
 
 export interface InviteRequest {
   email: string
   name: string
   part: Part | null
-  role: Role
+  groups: string[]
 }
 
 export const PARTS: { value: Part; label: string }[] = [
@@ -70,7 +80,7 @@ export const api = {
   listMembers: () => request<Member[]>('/api/members'),
   invite: (body: InviteRequest) =>
     request<{ member: Member; emailed: boolean }>('/api/members', { method: 'POST', body }),
-  updateMember: (id: string, body: { name?: string; part?: Part | null; role?: Role }) =>
+  updateMember: (id: string, body: { name?: string; part?: Part | null; groups?: string[]; owner?: boolean }) =>
     request<Member>(`/api/members/${encodeURIComponent(id)}`, { method: 'PATCH', body }),
   deleteMember: (id: string) => request<void>(`/api/members/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 }
@@ -209,6 +219,7 @@ export interface Rehearsal {
   end: string | null
   venue: string
   notes: string | null
+  groups: string[]
   songs: {
     id: string
     title: string
@@ -230,6 +241,7 @@ export interface RehearsalInput {
   venue?: string
   notes?: string | null
   songIds?: string[]
+  groups?: string[]
 }
 
 export const rehearsalsApi = {
@@ -251,6 +263,16 @@ export function formatWhen(start: string, end: string | null): string {
   const time = (iso: string) =>
     new Date(iso).toLocaleTimeString('en-GB', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: UK })
   return end ? `${day}, ${time(start)} to ${time(end)}` : `${day}, ${time(start)}`
+}
+
+export const groupsApi = {
+  list: () => request<Group[]>('/api/groups'),
+  create: (name: string) => request<Group>('/api/groups', { method: 'POST', body: { name } }),
+  rename: (id: string, name: string) =>
+    request<Group>(`/api/groups/${encodeURIComponent(id)}`, { method: 'PATCH', body: { name } }),
+  remove: (id: string) => request<void>(`/api/groups/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  setMembers: (id: string, memberIds: string[]) =>
+    request<Group>(`/api/groups/${encodeURIComponent(id)}/members`, { method: 'PUT', body: { memberIds } }),
 }
 
 export const signInUrl = '/.auth/login/google?post_login_redirect_uri=/'

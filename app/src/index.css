@@ -635,7 +635,7 @@ h3 {
 
 /* ---------- Song admin ---------- */
 
-.admin {
+.admin-section {
   display: grid;
   gap: 1rem;
   margin-top: 1rem;
@@ -643,7 +643,7 @@ h3 {
   border-top: 1px solid var(--border);
 }
 
-.admin > h2 {
+.admin-section > h2 {
   margin: 0;
 }
 
@@ -1059,8 +1059,29 @@ label.check input {
 /* Grid children may shrink below their content, so wide tables scroll inside .table-wrap
    instead of widening the page. */
 .page > *,
-.admin > *,
+.admin-section > *,
 .stack > *,
 .panel > * {
   min-width: 0;
+}
+
+/* ---------- Groups ---------- */
+
+.member-groups {
+  color: var(--text);
+}
+
+.for-groups {
+  margin-top: 0.125rem;
+  color: var(--accent);
+}
+
+.group-editor {
+  display: grid;
+  gap: 0.75rem;
+  grid-column: 1 / -1;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
 }
