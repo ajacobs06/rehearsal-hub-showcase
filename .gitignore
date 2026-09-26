@@ -47,3 +47,6 @@ Barbershop Rehearsal Hub*.md
 
 # FastAPI build output copied in at deploy time
 api/static/
+
+# Security audit reports (sensitive; never commit)
+security-audit/

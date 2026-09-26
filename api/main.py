@@ -13,6 +13,7 @@ from feedback import router as feedback_router
 from mailer import Mailer, get_mailer
 from models import ROLE_RANK, InviteRequest, InviteResponse, MeUpdate, Member, MemberUpdate, Role
 from rehearsals import router as rehearsals_router
+from security import SecurityMiddleware, invite_limiter
 from songs import router as songs_router
 from groups import admin_group_ids, check_groups, derived_role, require_owner_for_admin_groups
 from groups import router as groups_router
@@ -34,6 +35,8 @@ if os.environ.get("APPLICATIONINSIGHTS_CONNECTION_STRING"):
     # FastAPI was imported before monitoring started, so instrument this app explicitly;
     # otherwise incoming requests aren't recorded.
     FastAPIInstrumentor.instrument_app(app)
+# Body cap, early 401 for anonymous writes and rate limits, before FastAPI reads anything.
+app.add_middleware(SecurityMiddleware)
 app.include_router(songs_router)
 app.include_router(tracker_router)
 app.include_router(rehearsals_router)
@@ -101,6 +104,8 @@ def invite_member(
     groups: DocStore = Depends(get_group_store),
     mailer: Mailer = Depends(get_mailer),
 ) -> InviteResponse:
+    if not invite_limiter.allow(actor.id):
+        raise HTTPException(429, detail={"reason": "too_many_invites"})
     check_groups(groups, body.groups)
     admin_ids = admin_group_ids(groups)
     require_owner_for_admin_groups(actor, [], body.groups, admin_ids)
