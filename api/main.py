@@ -10,7 +10,7 @@ from auth import current_member, easy_auth_enabled, now, require_role
 from mailer import Mailer, get_mailer
 from models import ROLE_RANK, InviteRequest, InviteResponse, MeUpdate, Member, MemberUpdate, Role
 from songs import router as songs_router
-from store import DocStore, get_store
+from store import DocStore, get_progress_store, get_store
 
 # The React build is copied here at deploy time (see .github/workflows/deploy.yml).
 STATIC_DIR = (Path(__file__).parent / "static").resolve()
@@ -124,6 +124,7 @@ def delete_member(
     member_id: str,
     actor: Member = Depends(require_role("admin")),
     store: DocStore = Depends(get_store),
+    progress: DocStore = Depends(get_progress_store),
 ) -> None:
     doc = store.get(member_id)
     if doc is None:
@@ -132,6 +133,8 @@ def delete_member(
         raise HTTPException(400, detail={"reason": "cannot_delete_self"})
     if not can_manage(actor, Member(**doc).role):
         raise HTTPException(403, detail={"reason": "forbidden"})
+    for p in progress.find("memberId", member_id):
+        progress.delete(p["id"], partition=p["songId"])
     store.delete(member_id)
 
 

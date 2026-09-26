@@ -2,11 +2,13 @@ import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react'
 import {
   ApiError,
   FILE_LABEL,
+  PARTS,
   STATUS_LABEL,
   UPLOAD_ERROR,
   songsApi,
   type FileKind,
   type Member,
+  type Part,
   type Song,
   type SongStatus,
 } from './api'
@@ -58,7 +60,7 @@ export default function SongPage({ id, me, navigate }: { id: string; me: Member;
       </>
     )
 
-  const mine = me.part && song.files[me.part] ? me.part : null
+  const mine = song.myPart && song.files[song.myPart] ? song.myPart : null
   const others = AUDIO.filter((k) => k !== mine && song.files[k])
   const meta = [song.arranger, song.key && `Key of ${song.key}`].filter(Boolean).join(' · ')
 
@@ -71,23 +73,11 @@ export default function SongPage({ id, me, navigate }: { id: string; me: Member;
         <span className={`badge status-${song.status}`}>{STATUS_LABEL[song.status]}</span>
       </div>
 
-      {me.part && (
-        <section className="panel">
-          <h2>Your part: {FILE_LABEL[me.part]}</h2>
-          {mine ? (
-            <>
-              <Player songId={song.id} kind={mine} label={FILE_LABEL[mine]} />
-              <DownloadButton songId={song.id} kind={mine} />
-            </>
-          ) : (
-            <p className="muted">No {FILE_LABEL[me.part]} track yet.</p>
-          )}
-        </section>
-      )}
+      <PartPanel song={song} usual={me.part} onChange={setSong} />
 
       {others.length > 0 && (
         <section>
-          <h2>{me.part ? 'Other tracks' : 'Tracks'}</h2>
+          <h2>{song.myPart ? 'Other tracks' : 'Tracks'}</h2>
           <ul className="track-list">
             {others.map((k) => (
               <TrackRow key={k} songId={song.id} kind={k} />
@@ -112,6 +102,83 @@ export default function SongPage({ id, me, navigate }: { id: string; me: Member;
 
       {isAdmin && <AdminSong song={song} onChange={setSong} onDeleted={() => navigate('/')} />}
     </>
+  )
+}
+
+/** The part this member is learning for this song, with the option to learn a different one. */
+function PartPanel({ song, usual, onChange }: { song: Song; usual: Part | null; onChange: (s: Song) => void }) {
+  const part = song.myPart
+  const [picking, setPicking] = useState(part === null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(false)
+  const track = part && song.files[part] ? part : null
+
+  async function choose(p: Part | null) {
+    setBusy(true)
+    setError(false)
+    try {
+      onChange(await songsApi.setMyPart(song.id, p))
+      setPicking(false)
+    } catch {
+      setError(true)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <section className="panel">
+      <div className="row part-head">
+        <h2>
+          {part
+            ? `Your part${song.partOverride ? ' for this song' : ''}: ${FILE_LABEL[part]}`
+            : 'Which part are you learning?'}
+        </h2>
+        {part && !picking && (
+          <div className="actions">
+            <button className="button secondary small" onClick={() => setPicking(true)} disabled={busy}>
+              {song.partOverride ? 'Change' : 'Learn a different part'}
+            </button>
+            {song.partOverride && usual && (
+              <button className="button secondary small" onClick={() => choose(null)} disabled={busy}>
+                Back to {FILE_LABEL[usual]}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {picking ? (
+        <>
+          <div className="segmented" role="group" aria-label="Part for this song">
+            {PARTS.map((p) => (
+              <button
+                key={p.value}
+                className={p.value === part ? 'selected' : undefined}
+                aria-pressed={p.value === part}
+                disabled={busy}
+                onClick={() => choose(p.value)}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+          {part && (
+            <button className="button secondary small cancel" onClick={() => setPicking(false)}>
+              Cancel
+            </button>
+          )}
+        </>
+      ) : track ? (
+        <>
+          <Player key={track} songId={song.id} kind={track} label={FILE_LABEL[track]} />
+          <DownloadButton songId={song.id} kind={track} />
+        </>
+      ) : (
+        part && <p className="muted">No {FILE_LABEL[part]} track yet.</p>
+      )}
+      {error && <p className="error small">Couldn't change your part. Try again.</p>}
+    </section>
   )
 }
 

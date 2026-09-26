@@ -9,13 +9,15 @@ from models import (
     FileKind,
     FileLink,
     Member,
+    MyPartRequest,
     Song,
     SongCreate,
     SongFile,
     SongUpdate,
+    SongView,
     UploadTicket,
 )
-from store import DocStore, get_song_store
+from store import DocStore, get_progress_store, get_song_store
 from tracks import TrackStore, get_track_store
 
 router = APIRouter(prefix="/api/songs")
@@ -53,6 +55,17 @@ def load_song(store: DocStore, song_id: str, member: Member) -> Song:
     return Song(**doc)
 
 
+def progress_id(member_id: str, song_id: str) -> str:
+    return f"{member_id}:{song_id}"
+
+
+def view(song: Song, member: Member, progress: DocStore) -> SongView:
+    """The song plus the part this member is learning for it (per-song choice, else usual part)."""
+    doc = progress.get(progress_id(member.id, song.id), partition=song.id)
+    override = doc.get("part") if doc else None
+    return SongView(**song.model_dump(), myPart=override or member.part, partOverride=override is not None)
+
+
 def save(store: DocStore, song: Song, changes: dict) -> Song:
     """Merge changes and re-validate the whole record before it is stored."""
     updated = Song.model_validate({**song.model_dump(), **changes})
@@ -67,11 +80,21 @@ def save(store: DocStore, song: Song, changes: dict) -> Song:
 def list_songs(
     member: Member = Depends(current_member),
     store: DocStore = Depends(get_song_store),
-) -> list[Song]:
+    progress: DocStore = Depends(get_progress_store),
+) -> list[SongView]:
     songs = [Song(**d) for d in store.list_all()]
     if not is_admin(member):
         songs = [s for s in songs if s.status != "retired"]
-    return sorted(songs, key=lambda s: (STATUS_ORDER[s.status], s.title.lower()))
+    overrides = {d["songId"]: d["part"] for d in progress.find("memberId", member.id) if d.get("part")}
+    views = [
+        SongView(
+            **s.model_dump(),
+            myPart=overrides.get(s.id) or member.part,
+            partOverride=s.id in overrides,
+        )
+        for s in songs
+    ]
+    return sorted(views, key=lambda s: (STATUS_ORDER[s.status], s.title.lower()))
 
 
 @router.get("/{song_id}")
@@ -79,19 +102,41 @@ def get_song(
     song_id: str,
     member: Member = Depends(current_member),
     store: DocStore = Depends(get_song_store),
-) -> Song:
-    return load_song(store, song_id, member)
+    progress: DocStore = Depends(get_progress_store),
+) -> SongView:
+    return view(load_song(store, song_id, member), member, progress)
+
+
+@router.put("/{song_id}/my-part")
+def set_my_part(
+    song_id: str,
+    body: MyPartRequest,
+    member: Member = Depends(current_member),
+    store: DocStore = Depends(get_song_store),
+    progress: DocStore = Depends(get_progress_store),
+) -> SongView:
+    """Learn a different part for one song. null (or your usual part) removes the per-song choice."""
+    song = load_song(store, song_id, member)
+    pid = progress_id(member.id, song_id)
+    doc = progress.get(pid, partition=song_id) or {"id": pid, "memberId": member.id, "songId": song_id}
+    part = body.part if body.part != member.part else None
+    doc = {**doc, "part": part, "updatedAt": now()}
+    if part is None and set(doc) <= {"id", "memberId", "songId", "part", "updatedAt"}:
+        progress.delete(pid, partition=song_id)  # nothing else recorded for this song yet
+    else:
+        progress.upsert(doc)
+    return view(song, member, progress)
 
 
 @router.post("", status_code=201)
 def create_song(
     body: SongCreate,
-    _: Member = Depends(require_role("admin")),
+    admin: Member = Depends(require_role("admin")),
     store: DocStore = Depends(get_song_store),
-) -> Song:
+) -> SongView:
     song = Song(id=uuid.uuid4().hex, createdAt=now(), **body.model_dump())
     store.upsert(song.model_dump())
-    return song
+    return SongView(**song.model_dump(), myPart=admin.part)
 
 
 @router.patch("/{song_id}")
@@ -100,9 +145,10 @@ def update_song(
     body: SongUpdate,
     admin: Member = Depends(require_role("admin")),
     store: DocStore = Depends(get_song_store),
-) -> Song:
+    progress: DocStore = Depends(get_progress_store),
+) -> SongView:
     song = load_song(store, song_id, admin)
-    return save(store, song, body.model_dump(exclude_unset=True))
+    return view(save(store, song, body.model_dump(exclude_unset=True)), admin, progress)
 
 
 @router.delete("/{song_id}", status_code=204)
@@ -110,10 +156,13 @@ def delete_song(
     song_id: str,
     admin: Member = Depends(require_role("admin")),
     store: DocStore = Depends(get_song_store),
+    progress: DocStore = Depends(get_progress_store),
     tracks: TrackStore = Depends(get_track_store),
 ) -> None:
     load_song(store, song_id, admin)
     tracks.delete_prefix(f"{song_id}/")
+    for doc in progress.find("songId", song_id):
+        progress.delete(doc["id"], partition=song_id)
     store.delete(song_id)
 
 
@@ -144,8 +193,9 @@ def complete_upload(
     kind: FileKind,
     admin: Member = Depends(require_role("admin")),
     store: DocStore = Depends(get_song_store),
+    progress: DocStore = Depends(get_progress_store),
     tracks: TrackStore = Depends(get_track_store),
-) -> Song:
+) -> SongView:
     """Called after the browser uploads. Only files that pass these checks become visible."""
     song = load_song(store, song_id, admin)
     path = blob_path(song_id, kind)
@@ -167,7 +217,7 @@ def complete_upload(
         save(store, song, {"files": files})
         raise HTTPException(400, detail={"reason": reason})
     files = {**song.files, kind: SongFile(size=info.size, uploadedAt=now())}
-    return save(store, song, {"files": files})
+    return view(save(store, song, {"files": files}), admin, progress)
 
 
 @router.delete("/{song_id}/files/{kind}")
@@ -176,11 +226,13 @@ def delete_file(
     kind: FileKind,
     admin: Member = Depends(require_role("admin")),
     store: DocStore = Depends(get_song_store),
+    progress: DocStore = Depends(get_progress_store),
     tracks: TrackStore = Depends(get_track_store),
-) -> Song:
+) -> SongView:
     song = load_song(store, song_id, admin)
     tracks.delete(blob_path(song_id, kind))
-    return save(store, song, {"files": {k: v for k, v in song.files.items() if k != kind}})
+    updated = save(store, song, {"files": {k: v for k, v in song.files.items() if k != kind}})
+    return view(updated, admin, progress)
 
 
 @router.get("/{song_id}/files/{kind}")

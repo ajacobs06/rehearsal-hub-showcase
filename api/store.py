@@ -7,13 +7,13 @@ log = logging.getLogger(__name__)
 
 
 class DocStore(Protocol):
-    """One Cosmos container (partition key /id), or an in-memory stand-in."""
+    """One Cosmos container, or an in-memory stand-in. `partition` defaults to the doc id (pk /id)."""
 
-    def get(self, doc_id: str) -> dict | None: ...
+    def get(self, doc_id: str, partition: str | None = None) -> dict | None: ...
     def find(self, field: str, value: str) -> list[dict]: ...
     def list_all(self) -> list[dict]: ...
     def upsert(self, doc: dict) -> None: ...
-    def delete(self, doc_id: str) -> None: ...
+    def delete(self, doc_id: str, partition: str | None = None) -> None: ...
 
 
 class InMemoryStore:
@@ -22,7 +22,7 @@ class InMemoryStore:
     def __init__(self) -> None:
         self.docs: dict[str, dict] = {}
 
-    def get(self, doc_id: str) -> dict | None:
+    def get(self, doc_id: str, partition: str | None = None) -> dict | None:
         doc = self.docs.get(doc_id)
         return dict(doc) if doc else None
 
@@ -35,7 +35,7 @@ class InMemoryStore:
     def upsert(self, doc: dict) -> None:
         self.docs[doc["id"]] = dict(doc)
 
-    def delete(self, doc_id: str) -> None:
+    def delete(self, doc_id: str, partition: str | None = None) -> None:
         self.docs.pop(doc_id, None)
 
 
@@ -46,11 +46,11 @@ class CosmosStore:
         client = CosmosClient(endpoint, credential=azure_credential())
         self.container = client.get_database_client(database).get_container_client(container)
 
-    def get(self, doc_id: str) -> dict | None:
+    def get(self, doc_id: str, partition: str | None = None) -> dict | None:
         from azure.cosmos.exceptions import CosmosResourceNotFoundError
 
         try:
-            return _strip(self.container.read_item(doc_id, partition_key=doc_id))
+            return _strip(self.container.read_item(doc_id, partition_key=partition or doc_id))
         except CosmosResourceNotFoundError:
             return None
 
@@ -70,11 +70,11 @@ class CosmosStore:
     def upsert(self, doc: dict) -> None:
         self.container.upsert_item(doc)
 
-    def delete(self, doc_id: str) -> None:
+    def delete(self, doc_id: str, partition: str | None = None) -> None:
         from azure.cosmos.exceptions import CosmosResourceNotFoundError
 
         try:
-            self.container.delete_item(doc_id, partition_key=doc_id)
+            self.container.delete_item(doc_id, partition_key=partition or doc_id)
         except CosmosResourceNotFoundError:
             pass
 
@@ -115,3 +115,9 @@ def get_store() -> DocStore:
 @lru_cache
 def get_song_store() -> DocStore:
     return _make_store("songs")
+
+
+@lru_cache
+def get_progress_store() -> DocStore:
+    """Per member per song (pk /songId, id "<memberId>:<songId>"): part override, later learned state."""
+    return _make_store("progress")

@@ -88,6 +88,9 @@ export interface Song {
   status: SongStatus
   files: Partial<Record<FileKind, { size: number; uploadedAt: string }>>
   createdAt: string
+  /** The part the signed-in member is learning for this song: their per-song choice, else their usual part. */
+  myPart: Part | null
+  partOverride: boolean
 }
 
 export interface SongInput {
@@ -133,6 +136,8 @@ export const songsApi = {
   remove: (id: string) => request<void>(`/api/songs/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   fileLink: (id: string, kind: FileKind, download = false) =>
     request<FileLink>(`/api/songs/${encodeURIComponent(id)}/files/${kind}${download ? '?download=true' : ''}`),
+  setMyPart: (id: string, part: Part | null) =>
+    request<Song>(`/api/songs/${encodeURIComponent(id)}/my-part`, { method: 'PUT', body: { part } }),
   removeFile: (id: string, kind: FileKind) =>
     request<Song>(`/api/songs/${encodeURIComponent(id)}/files/${kind}`, { method: 'DELETE' }),
 

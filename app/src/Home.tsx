@@ -56,8 +56,9 @@ export default function Home({
         ) : (
           <div className="row">
             <div>
-              <p className="muted small">Your part</p>
+              <p className="muted small">Your usual part</p>
               <p className="part-name">{partLabel}</p>
+              <p className="muted small">You can learn a different part on any song's page.</p>
             </div>
             <button className="button secondary" onClick={() => setEditing(true)}>
               Change

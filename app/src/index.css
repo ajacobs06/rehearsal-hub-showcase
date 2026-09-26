@@ -667,3 +667,16 @@ progress {
   gap: 0.75rem;
   justify-items: start;
 }
+
+.part-head {
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+
+.part-head h2 {
+  margin: 0;
+}
+
+.cancel {
+  margin-top: 0.75rem;
+}

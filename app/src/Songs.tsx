@@ -55,11 +55,12 @@ export default function Songs({ me, navigate }: { me: Member; navigate: (to: str
                     >
                       <span className="song-title">{s.title}</span>
                       {s.arranger && <span className="muted small">{s.arranger}</span>}
-                      {me.part && (
-                        <span className={`small ${s.files[me.part] ? 'ready' : 'muted'}`}>
-                          {s.files[me.part]
-                            ? `${FILE_LABEL[me.part]} track ready`
-                            : `No ${FILE_LABEL[me.part]} track yet`}
+                      {s.myPart && (
+                        <span className={`small ${s.files[s.myPart] ? 'ready' : 'muted'}`}>
+                          {s.files[s.myPart]
+                            ? `${FILE_LABEL[s.myPart]} track ready`
+                            : `No ${FILE_LABEL[s.myPart]} track yet`}
+                          {s.partOverride && ' (this song)'}
                         </span>
                       )}
                     </a>

@@ -2,7 +2,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from main import app
-from store import InMemoryStore, get_song_store, get_store
+from store import InMemoryStore, get_progress_store, get_song_store, get_store
 from test_main import OWNER_EMAIL, add_member
 from tracks import InMemoryTrackStore, get_track_store
 
@@ -16,13 +16,15 @@ PDF = b"%PDF-1.7\n" + b"\x00" * 60
 def env(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("WEBSITE_AUTH_ENABLED", "True")
     monkeypatch.setenv("BOOTSTRAP_OWNER_EMAIL", OWNER_EMAIL)
-    members, songs, tracks = InMemoryStore(), InMemoryStore(), InMemoryTrackStore()
+    members, songs, progress, tracks = InMemoryStore(), InMemoryStore(), InMemoryStore(), InMemoryTrackStore()
     app.dependency_overrides[get_store] = lambda: members
     app.dependency_overrides[get_song_store] = lambda: songs
+    app.dependency_overrides[get_progress_store] = lambda: progress
     app.dependency_overrides[get_track_store] = lambda: tracks
     yield {
         "members": members,
         "songs": songs,
+        "progress": progress,
         "tracks": tracks,
         "admin": add_member(members, "admin@example.com", "admin"),
         "member": add_member(members, "m@example.com", "member"),
@@ -177,3 +179,92 @@ def test_delete_file(env) -> None:
     res = client.delete(f"/api/songs/{song['id']}/files/lead", headers=env["admin"])
     assert res.json()["files"] == {}
     assert env["tracks"].blobs == {}
+
+
+# ---------- Per-song part ----------
+
+
+def my_part(env, song_id: str, who: str = "member") -> str | None:
+    return client.get(f"/api/songs/{song_id}", headers=env[who]).json()["myPart"]
+
+
+def test_my_part_defaults_to_usual_part(env) -> None:
+    song = make_song(env)
+    assert my_part(env, song["id"]) == "lead"
+    assert client.get(f"/api/songs/{song['id']}", headers=env["member"]).json()["partOverride"] is False
+
+
+def test_learn_a_different_part_for_one_song(env) -> None:
+    song, other = make_song(env, title="Lida Rose"), make_song(env, title="Hunchback Medley")
+    res = client.put(f"/api/songs/{song['id']}/my-part", headers=env["member"], json={"part": "bass"})
+    assert (res.json()["myPart"], res.json()["partOverride"]) == ("bass", True)
+    assert my_part(env, song["id"]) == "bass"
+    assert my_part(env, other["id"]) == "lead"
+    listed = {s["title"]: (s["myPart"], s["partOverride"]) for s in client.get("/api/songs", headers=env["member"]).json()}
+    assert listed == {"Lida Rose": ("bass", True), "Hunchback Medley": ("lead", False)}
+
+
+def test_choice_is_per_member(env) -> None:
+    song = make_song(env)
+    client.put(f"/api/songs/{song['id']}/my-part", headers=env["member"], json={"part": "bass"})
+    assert my_part(env, song["id"], who="admin") == "lead"
+
+
+def test_reset_to_usual_part(env) -> None:
+    song = make_song(env)
+    client.put(f"/api/songs/{song['id']}/my-part", headers=env["member"], json={"part": "bass"})
+    res = client.put(f"/api/songs/{song['id']}/my-part", headers=env["member"], json={"part": None})
+    assert (res.json()["myPart"], res.json()["partOverride"]) == ("lead", False)
+    assert env["progress"].list_all() == []
+
+
+def test_picking_usual_part_stores_no_override(env) -> None:
+    song = make_song(env)
+    res = client.put(f"/api/songs/{song['id']}/my-part", headers=env["member"], json={"part": "lead"})
+    assert res.json()["partOverride"] is False
+    assert env["progress"].list_all() == []
+
+
+def test_changing_usual_part_flows_to_songs_without_a_choice(env) -> None:
+    song = make_song(env)
+    client.patch("/api/me", headers=env["member"], json={"part": "tenor"})
+    assert my_part(env, song["id"]) == "tenor"
+
+
+@pytest.mark.parametrize("body", [{"part": "soprano"}, {}, {"part": "bass", "songId": "other"}, {"part": "bass", "memberId": "x"}])
+def test_my_part_rejects_bad_input(env, body: dict) -> None:
+    song = make_song(env)
+    assert client.put(f"/api/songs/{song['id']}/my-part", headers=env["member"], json=body).status_code == 422
+    assert env["progress"].list_all() == []
+
+
+def test_my_part_on_retired_song_is_404(env) -> None:
+    song = make_song(env, status="retired")
+    res = client.put(f"/api/songs/{song['id']}/my-part", headers=env["member"], json={"part": "bass"})
+    assert res.status_code == 404
+
+
+def test_my_part_requires_sign_in(env) -> None:
+    song = make_song(env)
+    assert client.put(f"/api/songs/{song['id']}/my-part", json={"part": "bass"}).status_code == 401
+
+
+def test_deleting_song_removes_part_choices(env) -> None:
+    song = make_song(env)
+    client.put(f"/api/songs/{song['id']}/my-part", headers=env["member"], json={"part": "bass"})
+    client.delete(f"/api/songs/{song['id']}", headers=env["admin"])
+    assert env["progress"].list_all() == []
+
+
+def test_removing_member_removes_part_choices(env) -> None:
+    song = make_song(env)
+    client.put(f"/api/songs/{song['id']}/my-part", headers=env["member"], json={"part": "bass"})
+    owner = add_member(env["members"], OWNER_EMAIL, "owner")
+    assert client.delete("/api/members/google:sub-m@example.com", headers=owner).status_code == 204
+    assert env["progress"].list_all() == []
+
+
+def test_admin_responses_keep_my_part(env) -> None:
+    song = make_song(env)
+    res = client.patch(f"/api/songs/{song['id']}", headers=env["admin"], json={"key": "F"})
+    assert res.json()["myPart"] == "lead"

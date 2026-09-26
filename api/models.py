@@ -119,3 +119,15 @@ class UploadTicket(BaseModel):
 class FileLink(BaseModel):
     url: str
     expiresAt: str
+
+
+class SongView(Song):
+    """A song as seen by one member: the part they are learning for it."""
+
+    myPart: Part | None = None
+    partOverride: bool = False
+
+
+class MyPartRequest(Request):
+    # Required key; null means "go back to my usual part".
+    part: Part | None

@@ -230,6 +230,34 @@ resource devSongs 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers
   }
 }
 
+resource prodProgress 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-11-15' = {
+  parent: prodDb
+  name: 'progress'
+  properties: {
+    resource: {
+      id: 'progress'
+      partitionKey: {
+        paths: ['/songId']
+        kind: 'Hash'
+      }
+    }
+  }
+}
+
+resource devProgress 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-11-15' = {
+  parent: devDb
+  name: 'progress'
+  properties: {
+    resource: {
+      id: 'progress'
+      partitionKey: {
+        paths: ['/songId']
+        kind: 'Hash'
+      }
+    }
+  }
+}
+
 resource appCosmosAccess 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2024-11-15' = {
   parent: cosmos
   name: guid(cosmos.id, site.id, cosmosDataContributor)
