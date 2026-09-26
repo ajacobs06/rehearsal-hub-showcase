@@ -1,11 +1,16 @@
-"""Request guards that run before FastAPI parses anything (see security-audit H-1, L-2).
+"""Request guards that run before FastAPI parses anything, and security headers on every response.
 
-FastAPI reads and validates a request body before it runs auth dependencies, so without this an
-anonymous caller could make the server hold arbitrarily large bodies in memory.
+- FastAPI reads and validates a request body before it runs auth dependencies, so without the body
+  cap an anonymous caller could make the server hold arbitrarily large bodies in memory.
+- CSRF: every /api write must come from our own origin and, if it has a body, be JSON. Easy Auth's
+  session cookie is SameSite=None, so the browser would otherwise send it with cross-site requests.
 """
 import json
+import os
 import threading
 import time
+from functools import lru_cache
+from urllib.parse import urlsplit
 from collections.abc import Awaitable, Callable, MutableMapping
 from typing import Any
 
@@ -69,6 +74,64 @@ async def _reply(send: Send, status: int, detail: dict[str, str]) -> None:
     await send({"type": "http.response.body", "body": body})
 
 
+def _origin(url: str) -> str | None:
+    parts = urlsplit(url)
+    return f"{parts.scheme}://{parts.netloc}".lower() if parts.scheme and parts.netloc else None
+
+
+@lru_cache
+def security_headers() -> list[tuple[bytes, bytes]]:
+    # Audio, score links and uploads go straight between the browser and Blob Storage.
+    storage = _origin(os.environ.get("STORAGE_ACCOUNT_URL", "")) or ""
+    csp = "; ".join(
+        [
+            "default-src 'self'",
+            "script-src 'self'",
+            "style-src 'self'",
+            "img-src 'self' data: blob:",
+            "font-src 'self'",
+            f"media-src 'self' blob: {storage}".strip(),
+            f"connect-src 'self' {storage}".strip(),
+            "object-src 'none'",
+            "base-uri 'self'",
+            "form-action 'self'",
+            "frame-ancestors 'none'",
+            "upgrade-insecure-requests",
+        ]
+    )
+    return [
+        (b"content-security-policy", csp.encode()),
+        (b"x-content-type-options", b"nosniff"),
+        (b"x-frame-options", b"DENY"),
+        (b"referrer-policy", b"strict-origin-when-cross-origin"),
+        (b"permissions-policy", b"camera=(), microphone=(), geolocation=(), payment=(), usb=()"),
+        (b"cross-origin-opener-policy", b"same-origin"),
+    ]
+
+
+def allowed_origin(request: Request) -> str:
+    """APP_URL in production; locally, whatever host the request came in on (e.g. the Vite proxy)."""
+    return _origin(os.environ.get("APP_URL", "")) or f"{request.url.scheme}://{request.headers.get('host', '')}".lower()
+
+
+def same_origin(request: Request) -> bool:
+    """Browsers send Origin on every POST/PUT/PATCH/DELETE; Referer is the fallback. A request with
+    neither isn't from a browser page, so it can't carry a victim's cookie cross-site."""
+    expected = allowed_origin(request)
+    origin = request.headers.get("origin")
+    if origin is not None:
+        return origin.lower() == expected  # includes the opaque "null" origin: refused
+    referer = request.headers.get("referer")
+    if referer is not None:
+        return _origin(referer) == expected
+    return True
+
+
+def is_json(request: Request) -> bool:
+    media_type = request.headers.get("content-type", "").split(";")[0].strip().lower()
+    return media_type == "application/json"
+
+
 class SecurityMiddleware:
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
@@ -77,6 +140,16 @@ class SecurityMiddleware:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
+
+        async def send_with_headers(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                headers = [(k, v) for k, v in message.get("headers", []) if k.lower() != b"server"]
+                message["headers"] = headers + security_headers()
+            await send(message)
+
+        await self._handle(scope, receive, send_with_headers)
+
+    async def _handle(self, scope: Scope, receive: Receive, send: Send) -> None:
         request = Request(scope)
         path: str = scope["path"]
         is_api = path == "/api" or path.startswith("/api/")
@@ -85,6 +158,10 @@ class SecurityMiddleware:
         length = request.headers.get("content-length")
         if length is not None and (not length.isdigit() or int(length) > MAX_BODY):
             await _reply(send, 413, {"reason": "too_large"})
+            return
+
+        if is_api and is_write and not same_origin(request):
+            await _reply(send, 403, {"reason": "cross_origin"})
             return
 
         if is_api and path != "/api/health":
@@ -114,6 +191,10 @@ class SecurityMiddleware:
             more = message.get("more_body", False)
 
         body = b"".join(chunks)
+        if is_api and is_write and body and not is_json(request):
+            # Forms can only send urlencoded, multipart or text/plain; our front end always sends JSON.
+            await _reply(send, 415, {"reason": "json_required"})
+            return
         sent = False
 
         async def replay() -> Message:

@@ -52,7 +52,7 @@ resource site 'Microsoft.Web/sites@2023-12-01' = {
     httpsOnly: true
     siteConfig: {
       linuxFxVersion: 'PYTHON|3.11'
-      appCommandLine: 'gunicorn -w 2 -k uvicorn.workers.UvicornWorker main:app'
+      appCommandLine: 'gunicorn -w 2 -k worker.Worker main:app'
       ftpsState: 'Disabled'
       minTlsVersion: '1.2'
     }
