@@ -205,3 +205,68 @@ def test_admin_default_list_is_their_own_view(env) -> None:
 
 def test_members_cannot_list_all_rehearsals(env) -> None:
     assert client.get("/api/rehearsals?scope=all", headers=env["member"]).status_code == 403
+
+
+# ---------- Stale stored roles (security audit L-4) ----------
+
+
+def test_stale_stored_admin_role_grants_nothing(env) -> None:
+    """Authorisation uses the role derived from groups now, not the stored one."""
+    env["members"].patch(MEMBER_ID, {("role",): "admin", ("groups",): ["open"]})
+    assert client.get("/api/members", headers=env["member"]).status_code == 403
+    assert env["members"].get(MEMBER_ID)["role"] == "member"  # corrected on the way
+
+
+def test_admin_access_removed_during_a_concurrent_edit(env, owner) -> None:
+    """An owner removes a group's admin access while another admin's edit of a member of that
+    group is in flight. The edit used to write back the whole doc with the old role."""
+    assert client.patch("/api/groups/open", headers=owner, json={"admin": True}).status_code == 200
+    assert set_groups(env, owner, MEMBER_ID, ["open"]).json()["role"] == "admin"
+
+    members = env["members"]
+    real_patch = members.patch
+    raced = []
+
+    def patch_after_owner_change(doc_id, set_fields=None, remove_fields=None, partition=None):
+        # Runs between the edit's reads and its write: the owner's change lands first.
+        if doc_id == MEMBER_ID and ("part",) in (set_fields or {}) and not raced:
+            raced.append(True)
+            env["groups"].upsert({**env["groups"].get("open"), "admin": False})
+            real_patch(MEMBER_ID, {("role",): "member"})
+        return real_patch(doc_id, set_fields, remove_fields, partition)
+
+    members.patch = patch_after_owner_change
+    res = client.patch(f"/api/members/{MEMBER_ID}", headers=owner, json={"part": "bass"})
+    members.patch = real_patch
+    assert res.status_code == 200 and raced
+
+    # Whatever role the in-flight edit wrote, the member is no longer an admin.
+    assert client.get("/api/members", headers=env["member"]).status_code == 403
+    doc = members.get(MEMBER_ID)
+    assert (doc["part"], doc["groups"], doc["role"]) == ("bass", ["open"], "member")
+
+
+def test_member_edit_does_not_overwrite_other_fields(env, owner) -> None:
+    """Only changed fields are written: a groups change made meanwhile survives a part edit."""
+    members = env["members"]
+    real_patch = members.patch
+
+    def patch_after_groups_change(doc_id, set_fields=None, remove_fields=None, partition=None):
+        if doc_id == MEMBER_ID and ("part",) in (set_fields or {}):
+            real_patch(MEMBER_ID, {("groups",): ["auditioned"]})
+        return real_patch(doc_id, set_fields, remove_fields, partition)
+
+    members.patch = patch_after_groups_change
+    client.patch("/api/me", headers=env["member"], json={"part": "tenor"})
+    members.patch = real_patch
+    doc = members.get(MEMBER_ID)
+    assert (doc["part"], doc["groups"]) == ("tenor", ["auditioned"])
+
+
+def test_legacy_admin_without_groups_keeps_admin(env) -> None:
+    """Docs from before groups existed: admins count as Committee."""
+    doc = env["members"].get("google:sub-admin@example.com")
+    doc.pop("groups", None)
+    env["members"].upsert(doc)
+    assert client.get("/api/members", headers=env["admin"]).status_code == 200
+    assert env["members"].get("google:sub-admin@example.com")["groups"] == ["committee"]

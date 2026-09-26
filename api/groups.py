@@ -10,43 +10,11 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 
 from auth import current_member, require_role
-from models import Group, GroupCreate, GroupMembers, GroupUpdate, Member, Role
+from models import Group, GroupCreate, GroupMembers, GroupUpdate, Member
+from roles import DEFAULT_GROUPS, admin_group_ids, derived_role, group_ids, stored_groups
 from store import DocStore, get_group_store, get_rehearsal_store, get_store
 
-# Created once, the first time groups are used, so existing memberships keep working. After
-# that they are ordinary groups: renamed, deleted or given admin access like any other.
-DEFAULT_GROUPS = [
-    {"id": "auditioned", "name": "Auditioned chorus", "admin": False},
-    {"id": "open", "name": "Open chorus", "admin": False},
-    {"id": "committee", "name": "Committee", "admin": True},
-]
-META_ID = "_meta"
-
 router = APIRouter(prefix="/api/groups")
-
-
-def stored_groups(groups: DocStore) -> list[dict]:
-    if groups.get(META_ID) is None:
-        existing = {d["id"] for d in groups.list_all()}
-        for g in DEFAULT_GROUPS:
-            if g["id"] not in existing:
-                groups.upsert(g)
-        groups.upsert({"id": META_ID, "seeded": True})
-    return [d for d in groups.list_all() if not d["id"].startswith("_")]
-
-
-def group_ids(groups: DocStore) -> set[str]:
-    return {d["id"] for d in stored_groups(groups)}
-
-
-def admin_group_ids(groups: DocStore) -> set[str]:
-    return {d["id"] for d in stored_groups(groups) if d.get("admin")}
-
-
-def derived_role(role: Role, member_groups: list[str], admin_ids: set[str]) -> Role:
-    if role == "owner":
-        return "owner"
-    return "admin" if set(member_groups) & admin_ids else "member"
 
 
 def check_groups(groups: DocStore, ids: list[str]) -> None:

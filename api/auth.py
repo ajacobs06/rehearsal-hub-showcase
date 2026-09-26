@@ -9,7 +9,8 @@ from typing import Callable
 from fastapi import Depends, HTTPException, Request
 
 from models import ROLE_RANK, Member, Role
-from store import DocStore, get_store, on_app_service
+from roles import admin_group_ids, current_role, member_groups
+from store import DocStore, get_group_store, get_store, on_app_service
 
 CLAIM_ID = "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier"
 CLAIM_EMAIL = "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress"
@@ -84,6 +85,7 @@ def now() -> str:
 def current_member(
     principal: Principal | None = Depends(get_principal),
     store: DocStore = Depends(get_store),
+    groups: DocStore = Depends(get_group_store),
 ) -> Member:
     if principal is None:
         raise HTTPException(401, detail={"reason": "not_signed_in"})
@@ -91,10 +93,14 @@ def current_member(
     existing = store.get(principal.member_id)
     if existing:
         if "groups" not in existing:
-            # Accounts from before groups existed: admins and owners join the committee group,
-            # which is what makes someone an admin from now on.
-            existing = {**existing, "groups": ["committee"] if existing["role"] in ("admin", "owner") else []}
-            store.upsert(existing)
+            # Accounts from before groups existed get their groups stored (see member_groups).
+            existing = {**existing, "groups": member_groups(existing)}
+            store.patch(existing["id"], {("groups",): existing["groups"]})
+        # Authorise on the role as it is now, not as last stored (see roles.py).
+        role = current_role(existing, admin_group_ids(groups))
+        if role != existing["role"]:
+            existing = {**existing, "role": role}
+            store.patch(existing["id"], {("role",): role})
         return Member(**existing)
 
     # First sign-in: claim an invite for this email, or bootstrap the first owner.

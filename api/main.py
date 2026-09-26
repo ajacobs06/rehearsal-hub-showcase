@@ -16,8 +16,9 @@ from models import ROLE_RANK, InviteRequest, InviteResponse, MeUpdate, Member, M
 from rehearsals import router as rehearsals_router
 from security import SecurityMiddleware, invite_limiter
 from songs import router as songs_router
-from groups import admin_group_ids, check_groups, derived_role, require_owner_for_admin_groups
+from groups import check_groups, require_owner_for_admin_groups
 from groups import router as groups_router
+from roles import admin_group_ids, current_role, derived_role, member_groups
 from store import DocStore, get_feedback_store, get_group_store, get_progress_store, get_rehearsal_store, get_store
 from tracker import router as tracker_router
 
@@ -76,8 +77,9 @@ def update_me(
     member: Member = Depends(current_member),
     store: DocStore = Depends(get_store),
 ) -> Member:
-    updated = apply_update(member, body.model_dump(exclude_unset=True))
-    store.upsert(updated.model_dump())
+    changes = body.model_dump(exclude_unset=True)
+    updated = apply_update(member, changes)
+    patch_member(store, updated, changes.keys())
     return updated
 
 
@@ -89,6 +91,14 @@ def apply_update(member: Member, changes: dict) -> Member:
     return Member.model_validate({**member.model_dump(), **changes})
 
 
+def patch_member(store: DocStore, member: Member, fields) -> None:
+    """Write only the fields that changed, so a concurrent edit to other fields (e.g. a group's
+    admin access changing everyone's role) isn't overwritten by a stale copy of the whole doc."""
+    doc = member.model_dump()
+    if fields:
+        store.patch(member.id, {(f,): doc[f] for f in fields})
+
+
 def can_manage(actor: Member, role: Role) -> bool:
     """Owners manage everyone; otherwise you can only manage roles below your own."""
     return actor.role == "owner" or ROLE_RANK[actor.role] > ROLE_RANK[role]
@@ -98,8 +108,12 @@ def can_manage(actor: Member, role: Role) -> bool:
 def list_members(
     _: Member = Depends(require_role("admin")),
     store: DocStore = Depends(get_store),
+    groups: DocStore = Depends(get_group_store),
 ) -> list[Member]:
-    members = [Member(**d) for d in store.list_all()]
+    admin_ids = admin_group_ids(groups)
+    members = [
+        Member(**{**d, "groups": member_groups(d), "role": current_role(d, admin_ids)}) for d in store.list_all()
+    ]
     return sorted(members, key=lambda m: (m.status != "active", m.name.lower()))
 
 
@@ -147,12 +161,12 @@ def update_member(
     doc = store.get(member_id)
     if doc is None:
         raise HTTPException(404)
-    target = Member(**doc)
+    admin_ids = admin_group_ids(groups)
+    target = Member(**{**doc, "groups": member_groups(doc), "role": current_role(doc, admin_ids)})
     changes = body.model_dump(exclude_unset=True)
     if {"name", "part"} & changes.keys() and not can_manage(actor, target.role):
         raise HTTPException(403, detail={"reason": "forbidden"})
     new_groups = changes.get("groups", target.groups)
-    admin_ids = admin_group_ids(groups)
     if "groups" in changes:
         check_groups(groups, new_groups)
         require_owner_for_admin_groups(actor, target.groups, new_groups, admin_ids)
@@ -165,7 +179,8 @@ def update_member(
         role = "owner" if changes.pop("owner") else "member"
     changes["role"] = derived_role(role, new_groups, admin_ids)
     updated = apply_update(target, changes)
-    store.upsert(updated.model_dump())
+    # A doc from before groups existed gets its (defaulted) groups stored with this edit.
+    patch_member(store, updated, changes.keys() | ({"groups"} if "groups" not in doc else set()))
     return updated
 
 
@@ -177,13 +192,14 @@ def delete_member(
     progress: DocStore = Depends(get_progress_store),
     rehearsals: DocStore = Depends(get_rehearsal_store),
     feedback: DocStore = Depends(get_feedback_store),
+    groups: DocStore = Depends(get_group_store),
 ) -> None:
     doc = store.get(member_id)
     if doc is None:
         raise HTTPException(404)
     if member_id == actor.id:
         raise HTTPException(400, detail={"reason": "cannot_delete_self"})
-    if not can_manage(actor, Member(**doc).role):
+    if not can_manage(actor, current_role(doc, admin_group_ids(groups))):
         raise HTTPException(403, detail={"reason": "forbidden"})
     for p in progress.find("memberId", member_id):
         progress.delete(p["id"], partition=p["songId"])
