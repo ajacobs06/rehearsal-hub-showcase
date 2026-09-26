@@ -1,3 +1,4 @@
+import logging
 import re
 import uuid
 from typing import Literal
@@ -21,6 +22,8 @@ from models import (
 )
 from store import DocStore, get_progress_store, get_rehearsal_store, get_song_store
 from tracks import TrackStore, get_track_store
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/songs")
 
@@ -250,7 +253,7 @@ def complete_upload(
         files = {k: v for k, v in song.files.items() if k != kind}
         save(store, song, {"files": files})
         raise HTTPException(400, detail={"reason": reason})
-    files = {**song.files, kind: SongFile(size=info.size, uploadedAt=now())}
+    files = {**song.files, kind: SongFile(size=info.size, uploadedAt=now(), etag=info.etag)}
     return view(save(store, song, {"files": files}), admin, progress)
 
 
@@ -281,6 +284,13 @@ def file_link(
     song = load_song(store, song_id, member)
     if kind not in song.files:
         raise HTTPException(404)
+    checked = song.files[kind].etag
+    if checked is not None:
+        info = tracks.info(blob_path(song_id, kind))
+        if info is None or info.etag != checked:
+            # Changed after it passed the upload checks: don't hand out links to unchecked content.
+            log.warning("song %s %s changed after upload checks; link refused", song_id, kind)
+            raise HTTPException(409, detail={"reason": "file_changed"})
     name = None
     if download:
         safe_title = re.sub(r"[^A-Za-z0-9 ._-]", "", song.title).strip() or "track"

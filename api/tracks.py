@@ -1,10 +1,11 @@
 """Blob Storage for tracks and scores.
 
-Audio and PDFs never pass through the API. The API hands the browser a per-blob SAS link that
-expires in 15 minutes, signed with a user delegation key from the app's managed identity (the
-storage account has shared keys disabled).
+Audio and PDFs never pass through the API. The API hands the browser a per-blob SAS link, signed
+with a user delegation key from the app's managed identity (the storage account has shared keys
+disabled). Read links last 15 minutes; upload links 5, and only need to start the upload in time.
 """
 
+import hashlib
 import os
 import threading
 from dataclasses import dataclass
@@ -15,11 +16,13 @@ from typing import Protocol
 from store import azure_credential, on_app_service
 
 SAS_LIFETIME = timedelta(minutes=15)
+UPLOAD_SAS_LIFETIME = timedelta(minutes=5)
 
 
 @dataclass(frozen=True)
 class BlobInfo:
     size: int
+    etag: str | None = None  # changes whenever the blob is overwritten
 
 
 class TrackStore(Protocol):
@@ -51,13 +54,13 @@ class AzureTrackStore:
                 self._key = self.service.get_user_delegation_key(now - timedelta(minutes=5), self._key_expiry)
             return self._key
 
-    def _sas_url(self, path: str, permission, **overrides) -> tuple[str, datetime]:
+    def _sas_url(self, path: str, permission, lifetime: timedelta = SAS_LIFETIME, **overrides) -> tuple[str, datetime]:
         from urllib.parse import quote
 
         from azure.storage.blob import generate_blob_sas
 
         now = datetime.now(timezone.utc)
-        expiry = now + SAS_LIFETIME
+        expiry = now + lifetime
         sas = generate_blob_sas(
             account_name=self.service.account_name,
             container_name=self.container_name,
@@ -74,7 +77,7 @@ class AzureTrackStore:
     def upload_url(self, path: str, content_type: str) -> tuple[str, datetime]:
         from azure.storage.blob import BlobSasPermissions
 
-        return self._sas_url(path, BlobSasPermissions(create=True, write=True))
+        return self._sas_url(path, BlobSasPermissions(create=True, write=True), UPLOAD_SAS_LIFETIME)
 
     def read_url(self, path: str, content_type: str, download_name: str | None) -> tuple[str, datetime]:
         from azure.storage.blob import BlobSasPermissions
@@ -92,7 +95,7 @@ class AzureTrackStore:
             props = self.container.get_blob_client(path).get_blob_properties()
         except ResourceNotFoundError:
             return None
-        return BlobInfo(size=props.size)
+        return BlobInfo(size=props.size, etag=props.etag)
 
     def first_bytes(self, path: str, n: int) -> bytes:
         return self.container.get_blob_client(path).download_blob(offset=0, length=n).readall()
@@ -117,13 +120,15 @@ class InMemoryTrackStore:
         self.blobs: dict[str, bytes] = {}
 
     def upload_url(self, path: str, content_type: str) -> tuple[str, datetime]:
-        return f"https://storage.invalid/{path}?sig=write", datetime.now(timezone.utc) + SAS_LIFETIME
+        return f"https://storage.invalid/{path}?sig=write", datetime.now(timezone.utc) + UPLOAD_SAS_LIFETIME
 
     def read_url(self, path: str, content_type: str, download_name: str | None) -> tuple[str, datetime]:
         return f"https://storage.invalid/{path}?sig=read", datetime.now(timezone.utc) + SAS_LIFETIME
 
     def info(self, path: str) -> BlobInfo | None:
-        return BlobInfo(size=len(self.blobs[path])) if path in self.blobs else None
+        if path not in self.blobs:
+            return None
+        return BlobInfo(size=len(self.blobs[path]), etag=hashlib.md5(self.blobs[path]).hexdigest())
 
     def first_bytes(self, path: str, n: int) -> bytes:
         return self.blobs[path][:n]

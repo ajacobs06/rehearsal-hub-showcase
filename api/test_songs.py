@@ -446,3 +446,40 @@ def test_type_rejects_bad_input(env, body: dict) -> None:
 def test_members_cannot_change_type(env) -> None:
     song = make_song(env)
     assert client.patch(f"/api/songs/{song['id']}", headers=env["member"], json={"kind": "tag"}).status_code == 403
+
+
+# ---------- Files changed after the upload checks (security audit L-3) ----------
+
+
+def test_link_refused_if_file_is_overwritten_after_checks(env) -> None:
+    """The upload link stays valid for a few minutes after `complete`; a swap in that window
+    must not be served to members."""
+    song = make_song(env)
+    assert upload(env, song["id"], "score", PDF).status_code == 200
+    assert client.get(f"/api/songs/{song['id']}/files/score", headers=env["member"]).status_code == 200
+    env["tracks"].blobs[f"{song['id']}/score.pdf"] = b"<html><script>alert(1)</script>"
+    res = client.get(f"/api/songs/{song['id']}/files/score", headers=env["member"])
+    assert res.status_code == 409
+    assert res.json()["detail"]["reason"] == "file_changed"
+
+
+def test_reupload_through_complete_is_served_again(env) -> None:
+    song = make_song(env)
+    assert upload(env, song["id"], "lead", MP3).status_code == 200
+    assert upload(env, song["id"], "lead", MP3 + b"new take").status_code == 200
+    assert client.get(f"/api/songs/{song['id']}/files/lead", headers=env["member"]).status_code == 200
+
+
+def test_files_from_before_the_check_still_work(env) -> None:
+    song = make_song(env)
+    upload(env, song["id"], "lead", MP3)
+    doc = env["songs"].get(song["id"])
+    env["songs"].upsert({**doc, "files": {"lead": {"size": len(MP3), "uploadedAt": doc["files"]["lead"]["uploadedAt"]}}})
+    assert client.get(f"/api/songs/{song['id']}/files/lead", headers=env["member"]).status_code == 200
+
+
+def test_upload_links_are_shorter_than_read_links() -> None:
+    import tracks
+
+    assert tracks.UPLOAD_SAS_LIFETIME.total_seconds() == 300
+    assert tracks.SAS_LIFETIME.total_seconds() == 900

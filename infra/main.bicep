@@ -432,10 +432,18 @@ resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01'
       enabled: true
       days: 7
     }
+    containerDeleteRetentionPolicy: {
+      enabled: true
+      days: 7
+    }
+    // Every overwrite keeps the previous version, so a replaced score can be recovered
+    // (old versions are removed after 30 days by the lifecycle rule below).
+    isVersioningEnabled: true
     cors: {
       corsRules: [
         {
-          allowedOrigins: ['https://${site.properties.defaultHostName}', 'http://localhost:5173']
+          // Production only: local dev uses its own account (devStorage below).
+          allowedOrigins: ['https://${site.properties.defaultHostName}']
           allowedMethods: ['GET', 'HEAD', 'PUT', 'OPTIONS']
           allowedHeaders: ['*']
           exposedHeaders: ['*']
@@ -446,17 +454,37 @@ resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01'
   }
 }
 
-resource tracksContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
-  parent: blobService
-  name: 'tracks'
+resource versionCleanup 'Microsoft.Storage/storageAccounts/managementPolicies@2023-05-01' = {
+  parent: storage
+  name: 'default'
   properties: {
-    publicAccess: 'None'
+    policy: {
+      rules: [
+        {
+          name: 'delete-old-versions'
+          enabled: true
+          type: 'Lifecycle'
+          definition: {
+            filters: {
+              blobTypes: ['blockBlob']
+            }
+            actions: {
+              version: {
+                delete: {
+                  daysAfterCreationGreaterThan: 30
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
   }
 }
 
-resource devTracksContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+resource tracksContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
   parent: blobService
-  name: 'tracks-dev'
+  name: 'tracks'
   properties: {
     publicAccess: 'None'
   }
@@ -483,9 +511,60 @@ resource appTracksAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = 
   }
 }
 
+// ---------- Dev Blob Storage (local development only) ----------
+// A separate account so the production account's CORS trusts only the live site, and the developer
+// has no role on the production account at all.
+
+resource devStorage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
+  name: 'strhdev${take(suffix, 13)}'
+  location: location
+  kind: 'StorageV2'
+  sku: {
+    name: 'Standard_LRS'
+  }
+  properties: {
+    accessTier: 'Hot'
+    allowBlobPublicAccess: false
+    allowSharedKeyAccess: false
+    defaultToOAuthAuthentication: true
+    minimumTlsVersion: 'TLS1_2'
+    supportsHttpsTrafficOnly: true
+  }
+}
+
+resource devBlobService 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01' = {
+  parent: devStorage
+  name: 'default'
+  properties: {
+    deleteRetentionPolicy: {
+      enabled: true
+      days: 7
+    }
+    cors: {
+      corsRules: [
+        {
+          allowedOrigins: ['http://localhost:5173']
+          allowedMethods: ['GET', 'HEAD', 'PUT', 'OPTIONS']
+          allowedHeaders: ['*']
+          exposedHeaders: ['*']
+          maxAgeInSeconds: 3600
+        }
+      ]
+    }
+  }
+}
+
+resource devTracksContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+  parent: devBlobService
+  name: 'tracks-dev'
+  properties: {
+    publicAccess: 'None'
+  }
+}
+
 resource devBlobDelegator 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  scope: storage
-  name: guid(storage.id, developerPrincipalId, storageBlobDelegator)
+  scope: devStorage
+  name: guid(devStorage.id, developerPrincipalId, storageBlobDelegator)
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDelegator)
     principalId: developerPrincipalId
@@ -502,6 +581,8 @@ resource devTracksAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = 
     principalType: 'User'
   }
 }
+
+output devStorageUrl string = devStorage.properties.primaryEndpoints.blob
 
 // ---------- Error monitoring (server-side only) ----------
 // Free tier with a hard daily cap so it can never bill; App Insights masks client IPs by default.
@@ -574,6 +655,8 @@ resource vault 'Microsoft.KeyVault/vaults@2023-07-01' = {
     }
     enableRbacAuthorization: true
     softDeleteRetentionInDays: 7
+    // Permanent once on: deleted secrets can't be purged early, so they can always be recovered.
+    enablePurgeProtection: true
   }
 }
 
@@ -611,3 +694,53 @@ output cosmosEndpoint string = cosmos.properties.documentEndpoint
 output keyVaultName string = vault.name
 output storageUrl string = storage.properties.primaryEndpoints.blob
 output emailSender string = 'DoNotReply@${emailDomain.properties.mailFromSenderDomain}'
+
+// ---------- Audit logs ----------
+// Who changed data or read secrets, kept 30 days in the capped workspace. Blob reads (every audio
+// stream) and Cosmos data-plane requests are left out: too many for the 0.1 GB/day cap.
+
+resource vaultAudit 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
+  scope: vault
+  name: 'audit-to-log-analytics'
+  properties: {
+    workspaceId: logs.id
+    logs: [
+      {
+        category: 'AuditEvent'
+        enabled: true
+      }
+    ]
+  }
+}
+
+resource blobAudit 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
+  scope: blobService
+  name: 'audit-to-log-analytics'
+  properties: {
+    workspaceId: logs.id
+    logs: [
+      {
+        category: 'StorageWrite'
+        enabled: true
+      }
+      {
+        category: 'StorageDelete'
+        enabled: true
+      }
+    ]
+  }
+}
+
+resource cosmosAudit 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
+  scope: cosmos
+  name: 'audit-to-log-analytics'
+  properties: {
+    workspaceId: logs.id
+    logs: [
+      {
+        category: 'ControlPlaneRequests'
+        enabled: true
+      }
+    ]
+  }
+}

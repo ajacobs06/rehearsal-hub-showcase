@@ -137,6 +137,9 @@ AUDIO_KINDS: tuple[str, ...] = ("tenor", "lead", "bari", "bass", "full")
 class SongFile(BaseModel):
     size: int
     uploadedAt: str
+    # The blob's ETag when it passed the upload checks. Links are refused if the blob has changed
+    # since (e.g. overwritten with a still-valid upload link). None for files from before this check.
+    etag: str | None = None
 
 
 class Song(BaseModel):
