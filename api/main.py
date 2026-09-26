@@ -11,7 +11,7 @@ from mailer import Mailer, get_mailer
 from models import ROLE_RANK, InviteRequest, InviteResponse, MeUpdate, Member, MemberUpdate, Role
 from rehearsals import router as rehearsals_router
 from songs import router as songs_router
-from groups import check_groups, derived_role, require_owner_for_committee
+from groups import admin_group_ids, check_groups, derived_role, require_owner_for_admin_groups
 from groups import router as groups_router
 from store import DocStore, get_group_store, get_progress_store, get_rehearsal_store, get_store
 from tracker import router as tracker_router
@@ -86,7 +86,8 @@ def invite_member(
     mailer: Mailer = Depends(get_mailer),
 ) -> InviteResponse:
     check_groups(groups, body.groups)
-    require_owner_for_committee(actor, [], body.groups)
+    admin_ids = admin_group_ids(groups)
+    require_owner_for_admin_groups(actor, [], body.groups, admin_ids)
     email = body.email.strip().lower()
     if store.find("email", email):
         raise HTTPException(409, detail={"reason": "already_exists"})
@@ -95,7 +96,7 @@ def invite_member(
         email=email,
         name=body.name.strip(),
         part=body.part,
-        role=derived_role("member", body.groups),
+        role=derived_role("member", body.groups, admin_ids),
         groups=body.groups,
         status="invited",
         createdAt=now(),
@@ -113,8 +114,8 @@ def update_member(
     store: DocStore = Depends(get_store),
     groups: DocStore = Depends(get_group_store),
 ) -> Member:
-    """Name/part follow the usual manage rules. Any admin may change non-committee groups for
-    anyone; committee (which grants admin) and owner status are for owners only."""
+    """Name/part follow the usual manage rules. Any admin may change groups for anyone, except
+    groups with admin access and owner status, which are for owners only."""
     doc = store.get(member_id)
     if doc is None:
         raise HTTPException(404)
@@ -123,9 +124,10 @@ def update_member(
     if {"name", "part"} & changes.keys() and not can_manage(actor, target.role):
         raise HTTPException(403, detail={"reason": "forbidden"})
     new_groups = changes.get("groups", target.groups)
+    admin_ids = admin_group_ids(groups)
     if "groups" in changes:
         check_groups(groups, new_groups)
-        require_owner_for_committee(actor, target.groups, new_groups)
+        require_owner_for_admin_groups(actor, target.groups, new_groups, admin_ids)
     role = target.role
     if "owner" in changes:
         if actor.role != "owner":
@@ -133,7 +135,7 @@ def update_member(
         if target.id == actor.id and changes["owner"] != (target.role == "owner"):
             raise HTTPException(400, detail={"reason": "cannot_change_own_role"})
         role = "owner" if changes.pop("owner") else "member"
-    changes["role"] = derived_role(role, new_groups)
+    changes["role"] = derived_role(role, new_groups, admin_ids)
     updated = apply_update(target, changes)
     store.upsert(updated.model_dump())
     return updated

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { ApiError, COMMITTEE, PARTS, api, canManage, groupsApi, type Group, type Member, type Part } from './api'
+import { ApiError, PARTS, api, canManage, groupsApi, type Group, type Member, type Part } from './api'
 import { GroupCheckboxes, groupNames, refreshGroups, useGroups } from './groups'
 
 export default function Members({ me, view }: { me: Member; view: 'people' | 'groups' }) {
@@ -104,8 +104,8 @@ function InviteForm({ me, groups, onInvited }: { me: Member; groups: Group[] | n
       const text =
         err instanceof ApiError && err.reason === 'already_exists'
           ? 'That email is already a member or has been invited.'
-          : err instanceof ApiError && err.reason === 'owner_only_committee'
-            ? 'Only owners can add people to the committee.'
+          : err instanceof ApiError && err.reason === 'owner_only_admin_group'
+            ? 'Only owners can add people to groups with admin access.'
             : err instanceof ApiError && err.status === 422
               ? 'Check the name and email address.'
               : "Couldn't send the invite. Try again."
@@ -145,7 +145,7 @@ function InviteForm({ me, groups, onInvited }: { me: Member; groups: Group[] | n
           onChange={setChosen}
           me={me}
           legend="Groups"
-          hint="Committee members are admins."
+          hint="People in a group with admin access are admins."
         />
       </div>
       <button className="button" type="submit" disabled={busy}>
@@ -189,8 +189,8 @@ function MemberRow({
       await action()
     } catch (err) {
       setError(
-        err instanceof ApiError && err.reason === 'owner_only_committee'
-          ? 'Only owners can change the committee.'
+        err instanceof ApiError && err.reason === 'owner_only_admin_group'
+          ? 'Only owners can change groups with admin access.'
           : "Couldn't save that change.",
       )
     } finally {
@@ -322,6 +322,7 @@ function GroupsTab({
   onMembersChanged: () => void
 }) {
   const [newName, setNewName] = useState('')
+  const [newAdmin, setNewAdmin] = useState(false)
   const [openId, setOpenId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -329,8 +330,9 @@ function GroupsTab({
     e.preventDefault()
     setError(null)
     try {
-      const g = await groupsApi.create(newName)
+      const g = await groupsApi.create(newName, newAdmin)
       setNewName('')
+      setNewAdmin(false)
       refreshGroups()
       setOpenId(g.id)
     } catch {
@@ -351,17 +353,35 @@ function GroupsTab({
         Rehearsals can be for one or more groups; everyone else won't see them. Songs are always visible to everyone.
       </p>
       <section className="stack">
-        <ul className="member-list">
-          {groups.map((g) => (
-            <GroupRow key={g.id} me={me} group={g} members={members} open={openId === g.id} onToggle={() => setOpenId(openId === g.id ? null : g.id)} onSaved={onMembersChanged} />
-          ))}
-        </ul>
+        {groups.length > 0 ? (
+          <ul className="member-list">
+            {groups.map((g) => (
+              <GroupRow
+                key={g.id}
+                me={me}
+                group={g}
+                members={members}
+                open={openId === g.id}
+                onToggle={() => setOpenId(openId === g.id ? null : g.id)}
+                onSaved={onMembersChanged}
+              />
+            ))}
+          </ul>
+        ) : (
+          <p className="muted">No groups yet.</p>
+        )}
         <form className="panel" onSubmit={addGroup}>
           <div className="fields">
             <label className="wide">
               Add a group
               <input value={newName} onChange={(e) => setNewName(e.target.value)} required maxLength={60} placeholder="e.g. a quartet's name" />
             </label>
+            {me.role === 'owner' && (
+              <label className="check wide">
+                <input type="checkbox" checked={newAdmin} onChange={(e) => setNewAdmin(e.target.checked)} />
+                Members get admin access
+              </label>
+            )}
           </div>
           <button className="button" type="submit">
             Add group
@@ -391,11 +411,14 @@ function GroupRow({
   const current = members.filter((m) => m.groups.includes(group.id)).map((m) => m.id)
   const [picked, setPicked] = useState<string[]>(current)
   const [name, setName] = useState(group.name)
-  const [renaming, setRenaming] = useState(false)
+  const [admin, setAdmin] = useState(group.admin)
+  const [editing, setEditing] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
-  const readOnly = group.id === COMMITTEE && me.role !== 'owner'
+  const isOwner = me.role === 'owner'
+  // Groups with admin access decide who is an admin, so only owners may change them.
+  const readOnly = group.admin && !isOwner
 
   async function run(action: () => Promise<void>, done?: string) {
     setBusy(true)
@@ -408,8 +431,8 @@ function GroupRow({
       setMessage({
         kind: 'error',
         text:
-          err instanceof ApiError && err.reason === 'owner_only_committee'
-            ? 'Only owners can change the committee.'
+          err instanceof ApiError && err.reason === 'owner_only_admin_group'
+            ? 'Only owners can change groups with admin access.'
             : "Couldn't save that change.",
       })
     } finally {
@@ -425,8 +448,12 @@ function GroupRow({
         <p className="member-name">{group.name}</p>
         <p className="muted small">
           {group.memberCount} {group.memberCount === 1 ? 'person' : 'people'}
-          {group.id === COMMITTEE && '. Committee members are admins.'}
         </p>
+        {group.admin && (
+          <div className="badges">
+            <span className="badge admin">Admin access</span>
+          </div>
+        )}
       </div>
       <div className="member-actions">
         <button
@@ -440,37 +467,61 @@ function GroupRow({
         >
           Members
         </button>
-        {group.kind === 'custom' && (
-          <>
-            <button className="button secondary small" onClick={() => setRenaming(!renaming)}>
-              Rename
-            </button>
-            {confirmDelete ? (
-              <span className="confirm">
-                <button className="button danger small" disabled={busy} onClick={() => run(() => groupsApi.remove(group.id))}>
-                  Delete
-                </button>
-                <button className="button secondary small" onClick={() => setConfirmDelete(false)}>
-                  Keep
-                </button>
-              </span>
-            ) : (
-              <button className="button secondary small" onClick={() => setConfirmDelete(true)}>
+        <button
+          className="button secondary small"
+          aria-expanded={editing}
+          onClick={() => {
+            setName(group.name)
+            setAdmin(group.admin)
+            setEditing(!editing)
+          }}
+        >
+          Edit
+        </button>
+        {!readOnly &&
+          (confirmDelete ? (
+            <span className="confirm">
+              <button
+                className="button danger small"
+                disabled={busy}
+                onClick={() =>
+                  run(async () => {
+                    await groupsApi.remove(group.id)
+                    onSaved()
+                  })
+                }
+              >
                 Delete
               </button>
-            )}
-          </>
-        )}
+              <button className="button secondary small" onClick={() => setConfirmDelete(false)}>
+                Keep
+              </button>
+            </span>
+          ) : (
+            <button className="button secondary small" onClick={() => setConfirmDelete(true)}>
+              Delete
+            </button>
+          ))}
       </div>
 
-      {renaming && (
+      {confirmDelete && (
+        <p className="small group-warning">
+          Deleting removes {group.name} from everyone in it and from any rehearsals it was for
+          {group.admin ? ". Anyone who was an admin only through this group stops being an admin" : ''}.
+        </p>
+      )}
+
+      {editing && (
         <form
           className="group-editor"
           onSubmit={(e) => {
             e.preventDefault()
+            const body: { name: string; admin?: boolean } = { name }
+            if (isOwner && admin !== group.admin) body.admin = admin
             run(async () => {
-              await groupsApi.rename(group.id, name)
-              setRenaming(false)
+              await groupsApi.update(group.id, body)
+              if (body.admin !== undefined) onSaved()
+              setEditing(false)
             })
           }}
         >
@@ -478,9 +529,18 @@ function GroupRow({
             Group name
             <input value={name} onChange={(e) => setName(e.target.value)} required maxLength={60} />
           </label>
+          {isOwner && (
+            <label className="check">
+              <input type="checkbox" checked={admin} onChange={(e) => setAdmin(e.target.checked)} />
+              Members get admin access
+            </label>
+          )}
           <div className="actions">
             <button className="button small" type="submit" disabled={busy}>
-              Save name
+              Save
+            </button>
+            <button className="button secondary small" type="button" onClick={() => setEditing(false)}>
+              Cancel
             </button>
           </div>
         </form>
@@ -497,7 +557,9 @@ function GroupRow({
                 {m.status === 'invited' && <span className="muted small">(invited)</span>}
               </label>
             ))}
-            {readOnly && <span className="hint">Only owners can change the committee, because it makes people admins.</span>}
+            {readOnly && (
+              <span className="hint">Only owners can change this group, because its members are admins.</span>
+            )}
           </fieldset>
           {!readOnly && (
             <div className="actions">

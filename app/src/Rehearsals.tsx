@@ -256,7 +256,7 @@ export function RehearsalForm({
           me={me}
           legend="Who is it for?"
           hint="Leave all unticked for everyone. Only people in the ticked groups will see it."
-          committeeLocked={false}
+          adminGroupsLocked={false}
         />
         <label className="wide">
           Notes

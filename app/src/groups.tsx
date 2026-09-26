@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { COMMITTEE, groupsApi, type Group, type Member } from './api'
+import { groupsApi, type Group, type Member } from './api'
 
 // Group names change rarely: fetch once per page load and share, refreshing after edits.
 let cached: Promise<Group[]> | null = null
@@ -31,7 +31,7 @@ export function groupNames(ids: string[], groups: Group[] | null): string {
     .join(', ')
 }
 
-/** Group checkboxes. Committee makes people admins, so only owners may change it. */
+/** Group checkboxes. Groups with admin access make people admins, so only owners may change those. */
 export function GroupCheckboxes({
   groups,
   value,
@@ -39,7 +39,7 @@ export function GroupCheckboxes({
   me,
   legend,
   hint,
-  committeeLocked = true,
+  adminGroupsLocked = true,
 }: {
   groups: Group[] | null
   value: string[]
@@ -47,9 +47,9 @@ export function GroupCheckboxes({
   me: Member
   legend: string
   hint?: string
-  committeeLocked?: boolean
+  adminGroupsLocked?: boolean
 }) {
-  const locked = committeeLocked && me.role !== 'owner'
+  const locked = adminGroupsLocked && me.role !== 'owner'
   const toggle = (id: string) => onChange(value.includes(id) ? value.filter((x) => x !== id) : [...value, id])
   return (
     <fieldset className="wide song-picks">
@@ -62,15 +62,15 @@ export function GroupCheckboxes({
             <input
               type="checkbox"
               checked={value.includes(g.id)}
-              disabled={g.id === COMMITTEE && locked}
+              disabled={g.admin && locked}
               onChange={() => toggle(g.id)}
             />
             {g.name}
           </label>
         ))
       )}
-      {locked && groups?.some((g) => g.id === COMMITTEE) && (
-        <span className="hint">Only owners can change the committee, because it makes people admins.</span>
+      {locked && groups?.some((g) => g.admin) && (
+        <span className="hint">Only owners can change groups with admin access, because they make people admins.</span>
       )}
       {hint && <span className="hint">{hint}</span>}
     </fieldset>

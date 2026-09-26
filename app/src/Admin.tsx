@@ -13,7 +13,7 @@ const TABS = [
   { key: 'tracker', label: 'Tracker' },
 ] as const
 
-/** Committee and owners only: everything that manages the society lives here. */
+/** Admins and owners only: everything that manages the society lives here. */
 export default function Admin({ path, me, navigate }: { path: string; me: Member; navigate: (to: string) => void }) {
   const [, , section = 'rehearsals', id] = path.split('/')
   const tab = TABS.some((t) => t.key === section) ? section : 'rehearsals'

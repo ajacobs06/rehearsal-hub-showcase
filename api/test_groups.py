@@ -78,7 +78,7 @@ def test_existing_admins_join_committee(env) -> None:
 
 def test_quartet_lifecycle(env, owner) -> None:
     q = client.post("/api/groups", headers=env["admin"], json={"name": "Four on the Floor"}).json()
-    assert q["kind"] == "custom"
+    assert q["admin"] is False
     assert client.patch(f"/api/groups/{q['id']}", headers=env["admin"], json={"name": "Chord Cutters"}).json()["name"] == "Chord Cutters"
     res = client.put(f"/api/groups/{q['id']}/members", headers=env["admin"], json={"memberIds": [MEMBER_ID]})
     assert res.json()["memberCount"] == 1
@@ -97,9 +97,44 @@ def test_members_cannot_manage_groups(env) -> None:
     assert client.put("/api/groups/open/members", headers=env["member"], json={"memberIds": []}).status_code == 403
 
 
-def test_fixed_groups_cannot_be_renamed_or_deleted(env) -> None:
-    assert client.patch("/api/groups/open", headers=env["admin"], json={"name": "X"}).status_code == 400
-    assert client.delete("/api/groups/committee", headers=env["admin"]).status_code == 400
+def test_default_groups_are_ordinary_groups(env) -> None:
+    listed = [(g["id"], g["name"], g["admin"]) for g in client.get("/api/groups", headers=env["admin"]).json()]
+    assert listed == [("auditioned", "Auditioned chorus", False), ("open", "Open chorus", False), ("committee", "Committee", True)]
+    assert client.patch("/api/groups/open", headers=env["admin"], json={"name": "Community chorus"}).json()["name"] == "Community chorus"
+    assert client.delete("/api/groups/auditioned", headers=env["admin"]).status_code == 204
+    # Deleted defaults are not recreated.
+    ids = [g["id"] for g in client.get("/api/groups", headers=env["admin"]).json()]
+    assert ids == ["open", "committee"]
+
+
+def test_admin_access_changes_are_owner_only(env) -> None:
+    assert client.delete("/api/groups/committee", headers=env["admin"]).status_code == 403
+    assert client.patch("/api/groups/open", headers=env["admin"], json={"admin": True}).status_code == 403
+    assert client.post("/api/groups", headers=env["admin"], json={"name": "Board", "admin": True}).status_code == 403
+    assert client.patch("/api/groups/committee", headers=env["admin"], json={"name": "Exec"}).status_code == 200
+
+
+def test_admin_access_setting_promotes_and_demotes(env, owner) -> None:
+    set_groups(env, env["admin"], MEMBER_ID, ["open"])
+    assert client.patch("/api/groups/open", headers=owner, json={"admin": True}).json()["admin"] is True
+    assert env["members"].get(MEMBER_ID)["role"] == "admin"
+    client.patch("/api/groups/open", headers=owner, json={"admin": False})
+    assert env["members"].get(MEMBER_ID)["role"] == "member"
+
+
+def test_deleting_admin_group_demotes_but_keeps_owner(env, owner) -> None:
+    client.get("/api/me", headers=owner)  # owner joins committee via migration
+    admin_id = "google:sub-admin@example.com"
+    env["members"].upsert({**env["members"].get(admin_id), "groups": ["committee"]})
+    assert client.delete("/api/groups/committee", headers=owner).status_code == 204
+    assert env["members"].get(admin_id)["role"] == "member"
+    assert env["members"].get(f"google:sub-{OWNER_EMAIL}")["role"] == "owner"
+
+
+@pytest.mark.parametrize("body", [{"name": None}, {"admin": None}, {"name": ""}, {"kind": "fixed"}])
+def test_group_update_rejects_bad_input(env, owner, body: dict) -> None:
+    assert client.patch("/api/groups/open", headers=owner, json=body).status_code == 422
+
 
 
 def test_group_members_endpoint_guards_committee(env, owner) -> None:

@@ -17,7 +17,7 @@ class Member(BaseModel):
     email: str
     name: str = Field(min_length=1, max_length=100)
     part: Part | None = None
-    # Derived: owner stays owner; otherwise admin exactly when in the committee group.
+    # Derived: owner stays owner; otherwise admin exactly when in a group with admin access.
     role: Role = "member"
     status: Status
     groups: list[str] = []
@@ -78,16 +78,25 @@ class MemberUpdate(Request):
 class Group(BaseModel):
     id: str
     name: str
-    kind: Literal["fixed", "custom"]  # custom = added by admins (e.g. quartets)
+    admin: bool = False  # members of this group are admins
     memberCount: int = 0
 
 
 class GroupCreate(Request):
     name: str = Field(min_length=1, max_length=60)
+    admin: bool = False
 
 
 class GroupUpdate(Request):
-    name: str = Field(min_length=1, max_length=60)
+    name: str | None = Field(default=None, min_length=1, max_length=60)
+    admin: bool | None = None
+
+    @field_validator("name", "admin")
+    @classmethod
+    def not_null(cls, v):
+        if v is None:
+            raise ValueError("cannot be null")
+        return v
 
 
 class GroupMembers(Request):

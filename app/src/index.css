@@ -1131,3 +1131,8 @@ label.check input {
   font-size: 1.375rem;
   line-height: 1.25;
 }
+
+.group-warning {
+  grid-column: 1 / -1;
+  color: var(--danger);
+}

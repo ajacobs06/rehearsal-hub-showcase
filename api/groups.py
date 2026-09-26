@@ -1,8 +1,8 @@
-"""Member groups: fixed ones defined here, groups added by admins (e.g. quartets) stored in the
-`groups` container.
+"""Member groups, all stored in the `groups` container and editable from the admin page.
 
-Groups decide who sees which rehearsals (songs are visible to everyone). Being in the committee
-group is what makes someone an admin; owners stay owners regardless.
+Groups decide who sees which rehearsals (songs are visible to everyone). A group can give its
+members admin access; owners stay owners regardless. Changing anything that grants admin
+(the setting, membership of such a group, deleting it) is for owners only.
 """
 
 import uuid
@@ -13,24 +13,45 @@ from auth import current_member, require_role
 from models import Group, GroupCreate, GroupMembers, GroupUpdate, Member, Role
 from store import DocStore, get_group_store, get_rehearsal_store, get_store
 
-COMMITTEE = "committee"
-FIXED: dict[str, str] = {"auditioned": "Auditioned chorus", "open": "Open chorus", COMMITTEE: "Committee"}
+# Created once, the first time groups are used, so existing memberships keep working. After
+# that they are ordinary groups: renamed, deleted or given admin access like any other.
+DEFAULT_GROUPS = [
+    {"id": "auditioned", "name": "Auditioned chorus", "admin": False},
+    {"id": "open", "name": "Open chorus", "admin": False},
+    {"id": "committee", "name": "Committee", "admin": True},
+]
+META_ID = "_meta"
 
 router = APIRouter(prefix="/api/groups")
 
 
-def derived_role(role: Role, groups: list[str]) -> Role:
-    if role == "owner":
-        return "owner"
-    return "admin" if COMMITTEE in groups else "member"
+def stored_groups(groups: DocStore) -> list[dict]:
+    if groups.get(META_ID) is None:
+        existing = {d["id"] for d in groups.list_all()}
+        for g in DEFAULT_GROUPS:
+            if g["id"] not in existing:
+                groups.upsert(g)
+        groups.upsert({"id": META_ID, "seeded": True})
+    return [d for d in groups.list_all() if not d["id"].startswith("_")]
 
 
 def group_ids(groups: DocStore) -> set[str]:
-    return set(FIXED) | {d["id"] for d in groups.list_all()}
+    return {d["id"] for d in stored_groups(groups)}
+
+
+def admin_group_ids(groups: DocStore) -> set[str]:
+    return {d["id"] for d in stored_groups(groups) if d.get("admin")}
+
+
+def derived_role(role: Role, member_groups: list[str], admin_ids: set[str]) -> Role:
+    if role == "owner":
+        return "owner"
+    return "admin" if set(member_groups) & admin_ids else "member"
 
 
 def check_groups(groups: DocStore, ids: list[str]) -> None:
-    unknown = [g for g in ids if g not in group_ids(groups)]
+    known = group_ids(groups)
+    unknown = [g for g in ids if g not in known]
     if unknown:
         raise HTTPException(400, detail={"reason": "unknown_group", "groups": unknown})
 
@@ -40,19 +61,28 @@ def can_see(item_groups: list[str], member: Member) -> bool:
     return not item_groups or member.role in ("admin", "owner") or bool(set(item_groups) & set(member.groups))
 
 
-def require_owner_for_committee(actor: Member, before: list[str], after: list[str]) -> None:
-    # Committee membership grants admin, so only owners may change it.
-    if (COMMITTEE in before) != (COMMITTEE in after) and actor.role != "owner":
-        raise HTTPException(403, detail={"reason": "owner_only_committee"})
+def require_owner_for_admin_groups(actor: Member, before: list[str], after: list[str], admin_ids: set[str]) -> None:
+    # Joining or leaving a group with admin access changes who is an admin: owners only.
+    if set(before) & admin_ids != set(after) & admin_ids and actor.role != "owner":
+        raise HTTPException(403, detail={"reason": "owner_only_admin_group"})
 
 
-def load_custom(groups: DocStore, group_id: str) -> dict:
-    if group_id in FIXED:
-        raise HTTPException(400, detail={"reason": "fixed_group"})
-    doc = groups.get(group_id)
+def recompute_roles(members: DocStore, admin_ids: set[str]) -> None:
+    for m in members.list_all():
+        role = derived_role(m["role"], m.get("groups", []), admin_ids)
+        if role != m["role"]:
+            members.patch(m["id"], {("role",): role})
+
+
+def load_group(groups: DocStore, group_id: str) -> dict:
+    doc = next((d for d in stored_groups(groups) if d["id"] == group_id), None)
     if doc is None:
         raise HTTPException(404)
     return doc
+
+
+def to_group(doc: dict, count: int = 0) -> Group:
+    return Group(id=doc["id"], name=doc["name"], admin=bool(doc.get("admin")), memberCount=count)
 
 
 @router.get("")
@@ -65,53 +95,67 @@ def list_groups(
     for m in members.list_all():
         for g in m.get("groups", []):
             counts[g] = counts.get(g, 0) + 1
-    fixed = [Group(id=gid, name=name, kind="fixed", memberCount=counts.get(gid, 0)) for gid, name in FIXED.items()]
-    custom = sorted(
-        (Group(id=d["id"], name=d["name"], kind="custom", memberCount=counts.get(d["id"], 0)) for d in groups.list_all()),
-        key=lambda g: g.name.lower(),
-    )
-    return fixed + custom
+    docs = stored_groups(groups)
+    # Defaults first in their usual order, then the rest by name.
+    order = {g["id"]: i for i, g in enumerate(DEFAULT_GROUPS)}
+    docs.sort(key=lambda d: (order.get(d["id"], len(order)), d["name"].lower()))
+    return [to_group(d, counts.get(d["id"], 0)) for d in docs]
 
 
 @router.post("", status_code=201)
 def create_group(
     body: GroupCreate,
-    _: Member = Depends(require_role("admin")),
+    actor: Member = Depends(require_role("admin")),
     groups: DocStore = Depends(get_group_store),
 ) -> Group:
-    group = Group(id=f"q-{uuid.uuid4().hex[:12]}", name=body.name, kind="custom")
-    groups.upsert({"id": group.id, "name": group.name})
-    return group
+    if body.admin and actor.role != "owner":
+        raise HTTPException(403, detail={"reason": "owner_only_admin_group"})
+    stored_groups(groups)  # make sure the defaults exist before the first new group
+    doc = {"id": f"g-{uuid.uuid4().hex[:12]}", "name": body.name, "admin": body.admin}
+    groups.upsert(doc)
+    return to_group(doc)
 
 
 @router.patch("/{group_id}")
-def rename_group(
+def update_group(
     group_id: str,
     body: GroupUpdate,
-    _: Member = Depends(require_role("admin")),
+    actor: Member = Depends(require_role("admin")),
     groups: DocStore = Depends(get_group_store),
+    members: DocStore = Depends(get_store),
 ) -> Group:
-    doc = load_custom(groups, group_id)
-    groups.upsert({**doc, "name": body.name})
-    return Group(id=group_id, name=body.name, kind="custom")
+    doc = load_group(groups, group_id)
+    changes = body.model_dump(exclude_unset=True)
+    if "admin" in changes and changes["admin"] != bool(doc.get("admin")):
+        if actor.role != "owner":
+            raise HTTPException(403, detail={"reason": "owner_only_admin_group"})
+    doc = {**doc, **changes}
+    groups.upsert(doc)
+    if "admin" in changes:
+        recompute_roles(members, admin_group_ids(groups))
+    return to_group(doc, sum(1 for m in members.list_all() if group_id in m.get("groups", [])))
 
 
 @router.delete("/{group_id}", status_code=204)
 def delete_group(
     group_id: str,
-    _: Member = Depends(require_role("admin")),
+    actor: Member = Depends(require_role("admin")),
     groups: DocStore = Depends(get_group_store),
     members: DocStore = Depends(get_store),
     rehearsals: DocStore = Depends(get_rehearsal_store),
 ) -> None:
-    load_custom(groups, group_id)
+    doc = load_group(groups, group_id)
+    if doc.get("admin") and actor.role != "owner":
+        raise HTTPException(403, detail={"reason": "owner_only_admin_group"})
+    groups.delete(group_id)
     for m in members.list_all():
         if group_id in m.get("groups", []):
             members.patch(m["id"], {("groups",): [g for g in m["groups"] if g != group_id]})
     for r in rehearsals.list_all():
         if group_id in r.get("groups", []):
             rehearsals.patch(r["id"], {("groups",): [g for g in r["groups"] if g != group_id]})
-    groups.delete(group_id)
+    if doc.get("admin"):
+        recompute_roles(members, admin_group_ids(groups))
 
 
 @router.put("/{group_id}/members")
@@ -123,23 +167,21 @@ def set_group_members(
     members: DocStore = Depends(get_store),
 ) -> Group:
     """Replace who is in one group (e.g. pick a quartet's four singers)."""
-    check_groups(groups, [group_id])
+    doc = load_group(groups, group_id)
+    admin_ids = admin_group_ids(groups)
     wanted = set(dict.fromkeys(body.memberIds))
     all_members = {d["id"]: d for d in members.list_all()}
     unknown = sorted(wanted - set(all_members))
     if unknown:
         raise HTTPException(400, detail={"reason": "unknown_member", "memberIds": unknown})
     changes = []
-    for mid, doc in all_members.items():
-        before = doc.get("groups", [])
-        inside = group_id in before
-        if (mid in wanted) == inside:
+    for mid, m in all_members.items():
+        before = m.get("groups", [])
+        if (mid in wanted) == (group_id in before):
             continue
         after = [*before, group_id] if mid in wanted else [g for g in before if g != group_id]
-        require_owner_for_committee(actor, before, after)
-        changes.append((mid, doc, after))
-    for mid, doc, after in changes:
-        members.patch(mid, {("groups",): after, ("role",): derived_role(doc["role"], after)})
-    name = FIXED.get(group_id) or groups.get(group_id)["name"]
-    kind = "fixed" if group_id in FIXED else "custom"
-    return Group(id=group_id, name=name, kind=kind, memberCount=len(wanted))
+        require_owner_for_admin_groups(actor, before, after, admin_ids)
+        changes.append((mid, m, after))
+    for mid, m, after in changes:
+        members.patch(mid, {("groups",): after, ("role",): derived_role(m["role"], after, admin_ids)})
+    return to_group(doc, len(wanted))

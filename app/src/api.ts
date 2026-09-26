@@ -15,11 +15,10 @@ export interface Member {
 export interface Group {
   id: string
   name: string
-  kind: 'fixed' | 'custom'
+  /** Members of this group are admins. */
+  admin: boolean
   memberCount: number
 }
-
-export const COMMITTEE = 'committee'
 
 export interface InviteRequest {
   email: string
@@ -268,9 +267,9 @@ export function formatWhen(start: string, end: string | null): string {
 
 export const groupsApi = {
   list: () => request<Group[]>('/api/groups'),
-  create: (name: string) => request<Group>('/api/groups', { method: 'POST', body: { name } }),
-  rename: (id: string, name: string) =>
-    request<Group>(`/api/groups/${encodeURIComponent(id)}`, { method: 'PATCH', body: { name } }),
+  create: (name: string, admin = false) => request<Group>('/api/groups', { method: 'POST', body: { name, admin } }),
+  update: (id: string, body: { name?: string; admin?: boolean }) =>
+    request<Group>(`/api/groups/${encodeURIComponent(id)}`, { method: 'PATCH', body }),
   remove: (id: string) => request<void>(`/api/groups/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   setMembers: (id: string, memberIds: string[]) =>
     request<Group>(`/api/groups/${encodeURIComponent(id)}/members`, { method: 'PUT', body: { memberIds } }),
