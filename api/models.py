@@ -1,3 +1,4 @@
+import re
 from typing import Literal
 
 from datetime import timedelta
@@ -111,6 +112,23 @@ class InviteResponse(BaseModel):
 # ---------- Songs ----------
 
 SongStatus = Literal["learning", "performing", "retired"]
+Difficulty = Literal["easy", "medium", "hard"]
+MAX_TAGS = 10
+TAG_PATTERN = re.compile(r"^[a-z0-9][a-z0-9 &'-]{0,29}$")
+
+
+def normalise_tags(tags: list[str]) -> list[str]:
+    """Lowercase, trim and collapse spaces, drop duplicates; reject anything odd."""
+    out: list[str] = []
+    for raw in tags:
+        tag = " ".join(raw.split()).lower()
+        if not TAG_PATTERN.match(tag):
+            raise ValueError(f"tag {raw!r} must be 1-30 letters, numbers, spaces or & ' -")
+        if tag not in out:
+            out.append(tag)
+    if len(out) > MAX_TAGS:
+        raise ValueError(f"at most {MAX_TAGS} tags")
+    return out
 FileKind = Literal["tenor", "lead", "bari", "bass", "full", "score"]
 AUDIO_KINDS: tuple[str, ...] = ("tenor", "lead", "bari", "bass", "full")
 
@@ -126,6 +144,8 @@ class Song(BaseModel):
     arranger: str | None = Field(default=None, max_length=120)
     key: str | None = Field(default=None, max_length=20)
     status: SongStatus = "learning"
+    difficulty: Difficulty | None = None
+    tags: list[str] = []
     files: dict[FileKind, SongFile] = {}
     createdAt: str
 
@@ -135,6 +155,13 @@ class SongCreate(Request):
     arranger: str | None = Field(default=None, max_length=120)
     key: str | None = Field(default=None, max_length=20)
     status: SongStatus = "learning"
+    difficulty: Difficulty | None = None
+    tags: list[str] = Field(default_factory=list, max_length=50)
+
+    @field_validator("tags")
+    @classmethod
+    def clean_tags(cls, v: list[str]) -> list[str]:
+        return normalise_tags(v)
 
 
 class SongUpdate(Request):
@@ -142,13 +169,15 @@ class SongUpdate(Request):
     arranger: str | None = Field(default=None, max_length=120)
     key: str | None = Field(default=None, max_length=20)
     status: SongStatus | None = None
+    difficulty: Difficulty | None = None  # null clears it
+    tags: list[str] | None = Field(default=None, max_length=50)
 
-    @field_validator("title", "status")
+    @field_validator("title", "status", "tags")
     @classmethod
-    def not_null(cls, v: str | None) -> str:
+    def not_null(cls, v):
         if v is None:
             raise ValueError("cannot be null")
-        return v
+        return normalise_tags(v) if isinstance(v, list) else v
 
 
 class UploadTicket(BaseModel):

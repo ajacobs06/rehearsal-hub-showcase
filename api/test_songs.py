@@ -369,3 +369,51 @@ def test_tracker_entries_use_per_song_part_and_state(env) -> None:
     assert entries[(medley["id"], member_id)] == ("bass", "ready")
     assert entries[(lida["id"], member_id)] == ("lead", "not_started")
     assert len(t["entries"]) == 4
+
+
+# ---------- Difficulty and tags ----------
+
+
+def test_create_with_difficulty_and_tags(env) -> None:
+    song = make_song(env, title="Silent Night", difficulty="easy", tags=[" Christmas ", "christmas", "Slow   Ballad"])
+    assert (song["difficulty"], song["tags"]) == ("easy", ["christmas", "slow ballad"])
+    listed = client.get("/api/songs", headers=env["member"]).json()
+    assert (listed[0]["difficulty"], listed[0]["tags"]) == ("easy", ["christmas", "slow ballad"])
+
+
+def test_edit_difficulty_and_tags(env) -> None:
+    song = make_song(env, difficulty="hard", tags=["contest"])
+    res = client.patch(f"/api/songs/{song['id']}", headers=env["admin"], json={"tags": ["Upbeat", "fun"], "difficulty": None})
+    assert (res.json()["difficulty"], res.json()["tags"]) == (None, ["upbeat", "fun"])
+    res = client.patch(f"/api/songs/{song['id']}", headers=env["admin"], json={"tags": []})
+    assert res.json()["tags"] == []
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"title": "X", "difficulty": "expert"},
+        {"title": "X", "tags": ["x" * 31]},
+        {"title": "X", "tags": [""]},
+        {"title": "X", "tags": ["<script>"]},
+        {"title": "X", "tags": [str(i) for i in range(11)]},
+        {"title": "X", "tags": "christmas"},
+    ],
+)
+def test_create_rejects_bad_tags(env, body: dict) -> None:
+    assert client.post("/api/songs", headers=env["admin"], json=body).status_code == 422
+    assert env["songs"].list_all() == []
+
+
+@pytest.mark.parametrize("body", [{"tags": None}, {"tags": ["ok", "no/slash"]}, {"difficulty": "impossible"}])
+def test_update_rejects_bad_tags(env, body: dict) -> None:
+    song = make_song(env, tags=["christmas"])
+    assert client.patch(f"/api/songs/{song['id']}", headers=env["admin"], json=body).status_code == 422
+    assert env["songs"].get(song["id"])["tags"] == ["christmas"]
+
+
+def test_members_cannot_tag_songs(env) -> None:
+    song = make_song(env)
+    res = client.patch(f"/api/songs/{song['id']}", headers=env["member"], json={"tags": ["mine"]})
+    assert res.status_code == 403
+    assert env["songs"].get(song["id"])["tags"] == []

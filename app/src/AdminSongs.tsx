@@ -2,14 +2,19 @@ import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react'
 import {
   ApiError,
   FILE_LABEL,
+  DIFFICULTIES,
   STATUS_LABEL,
   UPLOAD_ERROR,
+  normaliseTag,
+  songTagLine,
   songsApi,
+  type Difficulty,
   type FileKind,
   type Song,
   type SongStatus,
 } from './api'
 import { internalLink } from './Rehearsals'
+import { useSongFilter } from './SongFilter'
 
 type Navigate = (to: string) => void
 
@@ -28,11 +33,14 @@ export function AdminSongList({ navigate }: { navigate: Navigate }) {
       .catch(() => setError(true))
   }, [])
 
+  const [shown, filters] = useSongFilter(songs)
+
   if (error) return <p className="error">Couldn't load songs. Refresh the page to try again.</p>
 
   return (
     <>
       <AddSong onCreated={(s) => navigate(`/admin/songs/${s.id}`)} />
+      {filters}
       {songs === null ? (
         <div className="panel">
           <div className="skeleton skeleton-line" />
@@ -40,9 +48,11 @@ export function AdminSongList({ navigate }: { navigate: Navigate }) {
         </div>
       ) : songs.length === 0 ? (
         <p className="muted">No songs yet. Add the first one above.</p>
+      ) : shown && shown.length === 0 ? (
+        <p className="muted">No songs match. Try another search or clear the filters.</p>
       ) : (
         GROUPS.map((status) => {
-          const items = songs.filter((s) => s.status === status)
+          const items = (shown ?? songs).filter((s) => s.status === status)
           if (items.length === 0) return null
           return (
             <div key={status} className="group">
@@ -56,6 +66,7 @@ export function AdminSongList({ navigate }: { navigate: Navigate }) {
                     <li key={s.id}>
                       <a {...internalLink(`/admin/songs/${s.id}`, navigate)}>
                         <span className="song-title">{s.title}</span>
+                        {songTagLine(s) && <span className="muted small">{songTagLine(s)}</span>}
                         <span className={`small ${have === ALL_FILES.length ? 'ready' : 'muted'}`}>
                           {have} of {ALL_FILES.length} files
                           {have < ALL_FILES.length &&
@@ -198,6 +209,9 @@ export function DetailsForm({ song, onChange }: { song: Song; onChange: (s: Song
   const [arranger, setArranger] = useState(song.arranger ?? '')
   const [key, setKey] = useState(song.key ?? '')
   const [status, setStatus] = useState<SongStatus>(song.status)
+  const [difficulty, setDifficulty] = useState<Difficulty | ''>(song.difficulty ?? '')
+  const [tags, setTags] = useState<string[]>(song.tags)
+  const knownTags = useKnownTags()
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
 
@@ -206,10 +220,19 @@ export function DetailsForm({ song, onChange }: { song: Song; onChange: (s: Song
     setBusy(true)
     setMessage(null)
     try {
-      onChange(await songsApi.update(song.id, { title, arranger: arranger || null, key: key || null, status }))
+      onChange(
+        await songsApi.update(song.id, {
+          title,
+          arranger: arranger || null,
+          key: key || null,
+          status,
+          difficulty: difficulty || null,
+          tags,
+        }),
+      )
       setMessage({ kind: 'ok', text: 'Saved.' })
     } catch {
-      setMessage({ kind: 'error', text: "Couldn't save. Check the title and try again." })
+      setMessage({ kind: 'error', text: "Couldn't save. Check the title and tags and try again." })
     } finally {
       setBusy(false)
     }
@@ -239,6 +262,18 @@ export function DetailsForm({ song, onChange }: { song: Song; onChange: (s: Song
             <option value="retired">Retired (hidden from members)</option>
           </select>
         </label>
+        <label>
+          Difficulty
+          <select value={difficulty} onChange={(e) => setDifficulty(e.target.value as Difficulty | '')}>
+            <option value="">Not set</option>
+            {DIFFICULTIES.map((d) => (
+              <option key={d.value} value={d.value}>
+                {d.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <TagEditor tags={tags} onChange={setTags} suggestions={knownTags} />
       </div>
       <button className="button" type="submit" disabled={busy}>
         {busy ? 'Saving' : 'Save details'}
@@ -370,6 +405,91 @@ export function DeleteSong({ song, onDeleted }: { song: Song; onDeleted: () => v
         </button>
       )}
       {error && <p className="error">Couldn't delete the song. Try again.</p>}
+    </div>
+  )
+}
+
+/** Every tag already used on a song, for suggestions (so tags stay consistent). */
+function useKnownTags(): string[] {
+  const [tags, setTags] = useState<string[]>([])
+  useEffect(() => {
+    songsApi
+      .list('all')
+      .then((all) => setTags([...new Set(all.flatMap((s) => s.tags))].sort()))
+      .catch(() => setTags([]))
+  }, [])
+  return tags
+}
+
+const MAX_TAGS = 10
+const TAG_OK = /^[a-z0-9][a-z0-9 &'-]{0,29}$/
+
+/** Genre and mood tags: type and press Enter or Add; suggestions come from tags already in use. */
+function TagEditor({ tags, onChange, suggestions }: { tags: string[]; onChange: (t: string[]) => void; suggestions: string[] }) {
+  const [draft, setDraft] = useState('')
+  const [error, setError] = useState<string | null>(null)
+
+  function add() {
+    const tag = normaliseTag(draft)
+    if (!tag) return
+    if (!TAG_OK.test(tag)) return setError("Tags can use letters, numbers, spaces and & ' - (up to 30 characters).")
+    if (tags.includes(tag)) return setDraft('')
+    if (tags.length >= MAX_TAGS) return setError(`A song can have up to ${MAX_TAGS} tags.`)
+    onChange([...tags, tag])
+    setDraft('')
+    setError(null)
+  }
+
+  return (
+    <div className="wide tag-editor">
+      <label htmlFor="tag-input">Tags</label>
+      <span className="tag-input">
+        <input
+          id="tag-input"
+          value={draft}
+          list="known-tags"
+          aria-describedby="tag-hint"
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ',') {
+              e.preventDefault()
+              add()
+            }
+          }}
+          maxLength={30}
+          autoComplete="off"
+        />
+        <button type="button" className="button secondary" onClick={add}>
+          Add
+        </button>
+      </span>
+      <span className="hint" id="tag-hint">
+        Genre or mood, e.g. christmas, upbeat, ballad. Press Enter or Add.
+      </span>
+      <datalist id="known-tags">
+        {suggestions
+          .filter((t) => !tags.includes(t))
+          .map((t) => (
+            <option key={t} value={t} />
+          ))}
+      </datalist>
+      {tags.length > 0 && (
+        <ul className="chips tag-list" aria-label="Tags on this song">
+          {tags.map((t) => (
+            <li key={t}>
+              <button
+                type="button"
+                className="chip"
+                aria-label={`Remove tag ${t}`}
+                onClick={() => onChange(tags.filter((x) => x !== t))}
+              >
+                {t} <span aria-hidden="true">×</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {error && <p className="error small">{error}</p>}
     </div>
   )
 }

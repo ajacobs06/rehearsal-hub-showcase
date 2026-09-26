@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { FILE_LABEL, STATE_LABEL, STATUS_LABEL, songsApi, type Song, type SongStatus } from './api'
+import { FILE_LABEL, STATE_LABEL, STATUS_LABEL, songTagLine, songsApi, type Song, type SongStatus } from './api'
+import { useSongFilter } from './SongFilter'
 
 const GROUPS: SongStatus[] = ['learning', 'performing']
 
@@ -14,6 +15,8 @@ export default function Songs({ navigate }: { navigate: (to: string) => void }) 
       .catch(() => setLoadError(true))
   }, [])
 
+  const [shown, filters] = useSongFilter(songs)
+
   if (loadError) return <p className="error">Couldn't load songs. Refresh the page to try again.</p>
 
   return (
@@ -21,7 +24,7 @@ export default function Songs({ navigate }: { navigate: (to: string) => void }) 
       <div className="section-head">
         <h2>Songs</h2>
       </div>
-
+      {filters}
 
       {songs === null ? (
         <div className="panel">
@@ -32,9 +35,11 @@ export default function Songs({ navigate }: { navigate: (to: string) => void }) 
         <p className="muted">
           {"No songs yet. They'll appear here once the committee adds them."}
         </p>
+      ) : shown && shown.length === 0 ? (
+        <p className="muted">No songs match. Try another search or clear the filters.</p>
       ) : (
         GROUPS.map((status) => {
-          const items = songs.filter((s) => s.status === status)
+          const items = (shown ?? songs).filter((s) => s.status === status)
           if (items.length === 0) return null
           return (
             <div key={status} className="group">
@@ -58,6 +63,7 @@ export default function Songs({ navigate }: { navigate: (to: string) => void }) 
                         )}
                       </span>
                       {s.arranger && <span className="muted small">{s.arranger}</span>}
+                      {songTagLine(s) && <span className="muted small">{songTagLine(s)}</span>}
                       {s.myPart && (
                         <span className={`small ${s.files[s.myPart] ? 'ready' : 'muted'}`}>
                           {s.files[s.myPart]

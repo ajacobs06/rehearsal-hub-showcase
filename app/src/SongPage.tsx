@@ -4,6 +4,7 @@ import {
   PARTS,
   STATES,
   STATUS_LABEL,
+  songTagLine,
   songsApi,
   type FileKind,
   type LearnState,
@@ -83,6 +84,7 @@ export default function SongPage({ id, me, navigate }: { id: string; me: Member;
       <div>
         <h1>{song.title}</h1>
         {meta && <p className="muted">{meta}</p>}
+        {songTagLine(song) && <p className="muted small">{songTagLine(song)}</p>}
         <span className={`badge status-${song.status}`}>{STATUS_LABEL[song.status]}</span>
       </div>
 

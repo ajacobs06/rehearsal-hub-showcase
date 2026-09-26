@@ -113,6 +113,8 @@ export interface Song {
   arranger: string | null
   key: string | null
   status: SongStatus
+  difficulty: Difficulty | null
+  tags: string[]
   files: Partial<Record<FileKind, { size: number; uploadedAt: string }>>
   createdAt: string
   /** The part the signed-in member is learning for this song: their per-song choice, else their usual part. */
@@ -136,7 +138,26 @@ export interface SongInput {
   arranger?: string | null
   key?: string | null
   status?: SongStatus
+  difficulty?: Difficulty | null
+  tags?: string[]
 }
+
+export type Difficulty = 'easy' | 'medium' | 'hard'
+
+export const DIFFICULTIES: { value: Difficulty; label: string }[] = [
+  { value: 'easy', label: 'Easy' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'hard', label: 'Hard' },
+]
+
+/** "Easy · christmas, upbeat" (or just one of the two, or empty). */
+export function songTagLine(song: { difficulty: Difficulty | null; tags: string[] }): string {
+  const level = DIFFICULTIES.find((d) => d.value === song.difficulty)?.label
+  return [level, song.tags.join(', ')].filter(Boolean).join(' · ')
+}
+
+/** Mirrors the server: lowercase, trim, collapse spaces. */
+export const normaliseTag = (tag: string) => tag.trim().replace(/\s+/g, ' ').toLowerCase()
 
 export interface FileLink {
   url: string
