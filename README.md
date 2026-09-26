@@ -30,4 +30,4 @@ Pushes to `main` build, test and deploy to Azure App Service via `.github/workfl
 Infrastructure lives in `infra/main.bicep`.
 
 ## Status
-Milestones 0-3 done (foundations, sign-in & members, songs & tracks, learned tracker). Next: Milestone 4 (rehearsal schedule).
+Milestones 0-4 deployed (foundations, sign-in & members, songs & tracks, learned tracker, rehearsal schedule). Next: Milestone 5 (pilot).
