@@ -73,6 +73,7 @@ resource appSettings 'Microsoft.Web/sites/config@2023-12-01' = {
     GOOGLE_PROVIDER_AUTHENTICATION_SECRET: '@Microsoft.KeyVault(VaultName=${vault.name};SecretName=google-client-secret)'
     STORAGE_ACCOUNT_URL: storage.properties.primaryEndpoints.blob
     TRACKS_CONTAINER: tracksContainer.name
+    APPLICATIONINSIGHTS_CONNECTION_STRING: insights.properties.ConnectionString
   }
   dependsOn: [appVaultAccess]
 }
@@ -314,6 +315,34 @@ resource devGroups 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/container
   }
 }
 
+resource prodFeedback 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-11-15' = {
+  parent: prodDb
+  name: 'feedback'
+  properties: {
+    resource: {
+      id: 'feedback'
+      partitionKey: {
+        paths: ['/id']
+        kind: 'Hash'
+      }
+    }
+  }
+}
+
+resource devFeedback 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-11-15' = {
+  parent: devDb
+  name: 'feedback'
+  properties: {
+    resource: {
+      id: 'feedback'
+      partitionKey: {
+        paths: ['/id']
+        kind: 'Hash'
+      }
+    }
+  }
+}
+
 resource appCosmosAccess 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2024-11-15' = {
   parent: cosmos
   name: guid(cosmos.id, site.id, cosmosDataContributor)
@@ -431,6 +460,35 @@ resource devTracksAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = 
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDataContributor)
     principalId: developerPrincipalId
     principalType: 'User'
+  }
+}
+
+// ---------- Error monitoring (server-side only) ----------
+// Free tier with a hard daily cap so it can never bill; App Insights masks client IPs by default.
+
+resource logs 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
+  name: 'log-rehearsal-hub-${suffix}'
+  location: location
+  properties: {
+    sku: {
+      name: 'PerGB2018'
+    }
+    retentionInDays: 30
+    workspaceCapping: {
+      dailyQuotaGb: json('0.1')
+    }
+  }
+}
+
+resource insights 'Microsoft.Insights/components@2020-02-02' = {
+  name: 'appi-rehearsal-hub-${suffix}'
+  location: location
+  kind: 'web'
+  properties: {
+    Application_Type: 'web'
+    WorkspaceResourceId: logs.id
+    IngestionMode: 'LogAnalytics'
+    RetentionInDays: 30
   }
 }
 

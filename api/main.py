@@ -1,3 +1,4 @@
+import os
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -6,24 +7,35 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from account import router as account_router
 from auth import current_member, easy_auth_enabled, now, require_role
+from feedback import router as feedback_router
 from mailer import Mailer, get_mailer
 from models import ROLE_RANK, InviteRequest, InviteResponse, MeUpdate, Member, MemberUpdate, Role
 from rehearsals import router as rehearsals_router
 from songs import router as songs_router
 from groups import admin_group_ids, check_groups, derived_role, require_owner_for_admin_groups
 from groups import router as groups_router
-from store import DocStore, get_group_store, get_progress_store, get_rehearsal_store, get_store
+from store import DocStore, get_feedback_store, get_group_store, get_progress_store, get_rehearsal_store, get_store
 from tracker import router as tracker_router
 
 # The React build is copied here at deploy time (see .github/workflows/deploy.yml).
 STATIC_DIR = (Path(__file__).parent / "static").resolve()
+
+# Server-side error monitoring (Application Insights), only where it's configured: never in tests
+# or local dev. No browser tracking; App Insights masks client IPs.
+if os.environ.get("APPLICATIONINSIGHTS_CONNECTION_STRING"):
+    from azure.monitor.opentelemetry import configure_azure_monitor
+
+    configure_azure_monitor()
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 app.include_router(songs_router)
 app.include_router(tracker_router)
 app.include_router(rehearsals_router)
 app.include_router(groups_router)
+app.include_router(feedback_router)
+app.include_router(account_router)
 
 
 @app.get("/api/health")
@@ -148,6 +160,7 @@ def delete_member(
     store: DocStore = Depends(get_store),
     progress: DocStore = Depends(get_progress_store),
     rehearsals: DocStore = Depends(get_rehearsal_store),
+    feedback: DocStore = Depends(get_feedback_store),
 ) -> None:
     doc = store.get(member_id)
     if doc is None:
@@ -161,6 +174,8 @@ def delete_member(
     for r in rehearsals.list_all():
         if member_id in r.get("rsvps", {}):
             rehearsals.patch(r["id"], remove_fields=[("rsvps", member_id)])
+    for f in feedback.find("memberId", member_id):
+        feedback.delete(f["id"])
     store.delete(member_id)
 
 

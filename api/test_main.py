@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from auth import CLAIM_EMAIL, CLAIM_ID
 from mailer import get_mailer
 from main import app
-from store import InMemoryStore, get_group_store, get_progress_store, get_rehearsal_store, get_store
+from store import InMemoryStore, get_feedback_store, get_group_store, get_progress_store, get_rehearsal_store, get_store
 
 OWNER_EMAIL = "owner@example.com"
 
@@ -31,6 +31,7 @@ def store(monkeypatch: pytest.MonkeyPatch) -> InMemoryStore:
     app.dependency_overrides[get_progress_store] = lambda: InMemoryStore()
     app.dependency_overrides[get_rehearsal_store] = lambda: InMemoryStore()
     app.dependency_overrides[get_group_store] = lambda: InMemoryStore()
+    app.dependency_overrides[get_feedback_store] = lambda: InMemoryStore()
     yield s
     app.dependency_overrides.clear()
 

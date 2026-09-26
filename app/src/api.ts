@@ -275,5 +275,34 @@ export const groupsApi = {
     request<Group>(`/api/groups/${encodeURIComponent(id)}/members`, { method: 'PUT', body: { memberIds } }),
 }
 
+// ---------- Feedback and your data ----------
+
+export interface FeedbackItem {
+  id: string
+  memberId: string
+  name: string
+  email: string
+  message: string
+  page: string | null
+  status: 'new' | 'done'
+  createdAt: string
+}
+
+export const feedbackApi = {
+  send: (message: string, page: string | null) =>
+    request<FeedbackItem>('/api/feedback', { method: 'POST', body: { message, page } }),
+  list: () => request<FeedbackItem[]>('/api/feedback'),
+  setStatus: (id: string, status: 'new' | 'done') =>
+    request<FeedbackItem>(`/api/feedback/${encodeURIComponent(id)}`, { method: 'PATCH', body: { status } }),
+  remove: (id: string) => request<void>(`/api/feedback/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+}
+
+export const accountApi = {
+  exportData: () => request<Record<string, unknown>>('/api/me/export'),
+  deleteAccount: () => request<void>('/api/me', { method: 'DELETE' }),
+}
+
+export const PRIVACY_CONTACT = 'barbershopsingingsociety@gmail.com'
+
 export const signInUrl = '/.auth/login/google?post_login_redirect_uri=/'
 export const signOutUrl = '/.auth/logout?post_logout_redirect_uri=/'

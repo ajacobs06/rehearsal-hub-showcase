@@ -1,5 +1,6 @@
 import type { Member } from './api'
 import { AdminRehearsalDetail, AdminRehearsalList } from './AdminRehearsals'
+import AdminFeedback from './AdminFeedback'
 import { AdminSongDetail, AdminSongList } from './AdminSongs'
 import Members from './Members'
 import { internalLink } from './Rehearsals'
@@ -11,6 +12,7 @@ const TABS = [
   { key: 'members', label: 'Members' },
   { key: 'groups', label: 'Groups' },
   { key: 'tracker', label: 'Tracker' },
+  { key: 'feedback', label: 'Feedback' },
 ] as const
 
 /** Admins and owners only: everything that manages the society lives here. */
@@ -34,6 +36,7 @@ export default function Admin({ path, me, navigate }: { path: string; me: Member
       {tab === 'members' && <Members me={me} view="people" />}
       {tab === 'groups' && <Members me={me} view="groups" />}
       {tab === 'tracker' && <Tracker />}
+      {tab === 'feedback' && <AdminFeedback />}
     </>
   )
 }

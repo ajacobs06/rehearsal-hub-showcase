@@ -339,3 +339,28 @@ class RehearsalView(BaseModel):
     # Admins only:
     attendees: list[Attendee] | None = None
     songParts: list[SongParts] | None = None
+
+
+# ---------- Feedback ----------
+
+FeedbackStatus = Literal["new", "done"]
+
+
+class Feedback(BaseModel):
+    id: str
+    memberId: str
+    name: str
+    email: str
+    message: str
+    page: str | None = None
+    status: FeedbackStatus = "new"
+    createdAt: str
+
+
+class FeedbackCreate(Request):
+    message: str = Field(min_length=1, max_length=2000)
+    page: str | None = Field(default=None, max_length=200)
+
+
+class FeedbackUpdate(Request):
+    status: FeedbackStatus

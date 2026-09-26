@@ -4,7 +4,11 @@ import { ApiError, api, signInUrl, signOutUrl, type Member } from './api'
 // The BSS badge, used as-is: never recoloured, stretched or cropped.
 const LOGO = '/bss-logo.png'
 import Home from './Home'
+import { internalLink } from './Rehearsals'
+import Account from './Account'
 import Admin from './Admin'
+import FeedbackPage from './FeedbackPage'
+import Privacy from './Privacy'
 import RehearsalPage from './RehearsalPage'
 import Schedule from './Schedule'
 import SongPage from './SongPage'
@@ -17,9 +21,9 @@ type Session =
   | { kind: 'member'; member: Member }
 
 function usePath(): [string, (to: string) => void] {
-  const [path, setPath] = useState(window.location.pathname)
+  const [path, setPath] = useState(window.location.pathname + window.location.search)
   useEffect(() => {
-    const onPop = () => setPath(window.location.pathname)
+    const onPop = () => setPath(window.location.pathname + window.location.search)
     window.addEventListener('popstate', onPop)
     return () => window.removeEventListener('popstate', onPop)
   }, [])
@@ -59,6 +63,23 @@ export default function App() {
     )
   }
 
+  const [pathname, query = ''] = path.split('?')
+
+  // The privacy notice is public: signed-out visitors get it on its own.
+  if (pathname === '/privacy' && session.kind !== 'member') {
+    return (
+      <main className="page">
+        <Privacy
+          back={
+            <a className="back" {...internalLink('/', navigate)}>
+              Back
+            </a>
+          }
+        />
+      </main>
+    )
+  }
+
   if (session.kind === 'signed-out') {
     return (
       <main className="page gate welcome">
@@ -75,6 +96,9 @@ export default function App() {
             Sign in with Google
           </a>
           <p className="muted small">Not on the list yet? Ask the committee to invite the Google account you'll use.</p>
+          <a className="small text-link" {...internalLink('/privacy', navigate)}>
+            Privacy notice
+          </a>
         </div>
       </main>
     )
@@ -111,19 +135,30 @@ export default function App() {
 
   const { member } = session
   const isAdmin = member.role !== 'member'
-  const songId = path.match(/^\/songs\/([A-Za-z0-9]+)$/)?.[1]
-  const rehearsalId = path.match(/^\/rehearsals\/([A-Za-z0-9]+)$/)?.[1]
+  const songId = pathname.match(/^\/songs\/([A-Za-z0-9]+)$/)?.[1]
+  const rehearsalId = pathname.match(/^\/rehearsals\/([A-Za-z0-9]+)$/)?.[1]
   // Old bookmarks from before the admin page existed.
-  const adminPath = path === '/members' ? '/admin/members' : path === '/tracker' ? '/admin/tracker' : path
+  const adminPath = pathname === '/members' ? '/admin/members' : pathname === '/tracker' ? '/admin/tracker' : pathname
   const view = isAdmin && adminPath.startsWith('/admin')
     ? 'admin'
-    : path === '/schedule'
+    : pathname === '/schedule'
       ? 'schedule'
-      : rehearsalId
-        ? 'rehearsal'
-        : songId
-          ? 'song'
-          : 'home'
+      : pathname === '/privacy'
+        ? 'privacy'
+        : pathname === '/feedback'
+          ? 'feedback'
+          : pathname === '/account'
+            ? 'account'
+            : rehearsalId
+              ? 'rehearsal'
+              : songId
+                ? 'song'
+                : 'home'
+  const backHome = (
+    <a className="back" {...internalLink('/', navigate)}>
+      Home
+    </a>
+  )
 
   const link = (to: string, label: string, active: boolean) => (
     <a
@@ -171,9 +206,26 @@ export default function App() {
           <RehearsalPage key={rehearsalId} id={rehearsalId} me={member} navigate={navigate} />
         ) : view === 'song' && songId ? (
           <SongPage key={songId} id={songId} me={member} navigate={navigate} />
+        ) : view === 'privacy' ? (
+          <Privacy back={backHome} />
+        ) : view === 'feedback' ? (
+          <FeedbackPage from={new URLSearchParams(query).get('from')} back={backHome} />
+        ) : view === 'account' ? (
+          <Account me={member} back={backHome} />
         ) : (
           <Home member={member} navigate={navigate} onChange={(m) => setSession({ kind: 'member', member: m })} />
         )}
+        <footer className="site-footer">
+          <a className="text-link" {...internalLink('/privacy', navigate)}>
+            Privacy
+          </a>
+          <a className="text-link" {...internalLink('/account', navigate)}>
+            Your data
+          </a>
+          <a className="text-link" {...internalLink(`/feedback?from=${encodeURIComponent(pathname)}`, navigate)}>
+            Send feedback
+          </a>
+        </footer>
       </main>
     </>
   )
