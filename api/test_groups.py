@@ -78,7 +78,7 @@ def test_existing_admins_join_committee(env) -> None:
 
 def test_quartet_lifecycle(env, owner) -> None:
     q = client.post("/api/groups", headers=env["admin"], json={"name": "Four on the Floor"}).json()
-    assert q["kind"] == "quartet"
+    assert q["kind"] == "custom"
     assert client.patch(f"/api/groups/{q['id']}", headers=env["admin"], json={"name": "Chord Cutters"}).json()["name"] == "Chord Cutters"
     res = client.put(f"/api/groups/{q['id']}/members", headers=env["admin"], json={"memberIds": [MEMBER_ID]})
     assert res.json()["memberCount"] == 1

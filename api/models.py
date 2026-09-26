@@ -78,7 +78,7 @@ class MemberUpdate(Request):
 class Group(BaseModel):
     id: str
     name: str
-    kind: Literal["fixed", "quartet"]
+    kind: Literal["fixed", "custom"]  # custom = added by admins (e.g. quartets)
     memberCount: int = 0
 
 

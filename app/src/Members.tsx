@@ -325,7 +325,7 @@ function GroupsTab({
   const [openId, setOpenId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  async function addQuartet(e: FormEvent) {
+  async function addGroup(e: FormEvent) {
     e.preventDefault()
     setError(null)
     try {
@@ -334,7 +334,7 @@ function GroupsTab({
       refreshGroups()
       setOpenId(g.id)
     } catch {
-      setError("Couldn't add the quartet. Check the name and try again.")
+      setError("Couldn't add the group. Check the name and try again.")
     }
   }
 
@@ -345,43 +345,26 @@ function GroupsTab({
       </div>
     )
 
-  const fixed = groups.filter((g) => g.kind === 'fixed')
-  const quartets = groups.filter((g) => g.kind === 'quartet')
-
   return (
     <>
       <p className="muted">
         Rehearsals can be for one or more groups; everyone else won't see them. Songs are always visible to everyone.
       </p>
       <section className="stack">
-        <h2>Chorus and committee</h2>
         <ul className="member-list">
-          {fixed.map((g) => (
+          {groups.map((g) => (
             <GroupRow key={g.id} me={me} group={g} members={members} open={openId === g.id} onToggle={() => setOpenId(openId === g.id ? null : g.id)} onSaved={onMembersChanged} />
           ))}
         </ul>
-      </section>
-
-      <section className="stack">
-        <h2>Quartets</h2>
-        {quartets.length > 0 ? (
-          <ul className="member-list">
-            {quartets.map((g) => (
-              <GroupRow key={g.id} me={me} group={g} members={members} open={openId === g.id} onToggle={() => setOpenId(openId === g.id ? null : g.id)} onSaved={onMembersChanged} />
-            ))}
-          </ul>
-        ) : (
-          <p className="muted">No quartets yet.</p>
-        )}
-        <form className="panel" onSubmit={addQuartet}>
+        <form className="panel" onSubmit={addGroup}>
           <div className="fields">
             <label className="wide">
-              Add a quartet
-              <input value={newName} onChange={(e) => setNewName(e.target.value)} required maxLength={60} placeholder="Quartet name" />
+              Add a group
+              <input value={newName} onChange={(e) => setNewName(e.target.value)} required maxLength={60} placeholder="e.g. a quartet's name" />
             </label>
           </div>
           <button className="button" type="submit">
-            Add quartet
+            Add group
           </button>
           {error && <p className="error">{error}</p>}
         </form>
@@ -457,7 +440,7 @@ function GroupRow({
         >
           Members
         </button>
-        {group.kind === 'quartet' && (
+        {group.kind === 'custom' && (
           <>
             <button className="button secondary small" onClick={() => setRenaming(!renaming)}>
               Rename
@@ -492,7 +475,7 @@ function GroupRow({
           }}
         >
           <label>
-            Quartet name
+            Group name
             <input value={name} onChange={(e) => setName(e.target.value)} required maxLength={60} />
           </label>
           <div className="actions">

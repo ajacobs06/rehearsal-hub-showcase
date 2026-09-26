@@ -1,4 +1,5 @@
-"""Member groups: fixed ones defined here, quartets stored in the `groups` container.
+"""Member groups: fixed ones defined here, groups added by admins (e.g. quartets) stored in the
+`groups` container.
 
 Groups decide who sees which rehearsals (songs are visible to everyone). Being in the committee
 group is what makes someone an admin; owners stay owners regardless.
@@ -45,7 +46,7 @@ def require_owner_for_committee(actor: Member, before: list[str], after: list[st
         raise HTTPException(403, detail={"reason": "owner_only_committee"})
 
 
-def load_quartet(groups: DocStore, group_id: str) -> dict:
+def load_custom(groups: DocStore, group_id: str) -> dict:
     if group_id in FIXED:
         raise HTTPException(400, detail={"reason": "fixed_group"})
     doc = groups.get(group_id)
@@ -65,45 +66,45 @@ def list_groups(
         for g in m.get("groups", []):
             counts[g] = counts.get(g, 0) + 1
     fixed = [Group(id=gid, name=name, kind="fixed", memberCount=counts.get(gid, 0)) for gid, name in FIXED.items()]
-    quartets = sorted(
-        (Group(id=d["id"], name=d["name"], kind="quartet", memberCount=counts.get(d["id"], 0)) for d in groups.list_all()),
+    custom = sorted(
+        (Group(id=d["id"], name=d["name"], kind="custom", memberCount=counts.get(d["id"], 0)) for d in groups.list_all()),
         key=lambda g: g.name.lower(),
     )
-    return fixed + quartets
+    return fixed + custom
 
 
 @router.post("", status_code=201)
-def create_quartet(
+def create_group(
     body: GroupCreate,
     _: Member = Depends(require_role("admin")),
     groups: DocStore = Depends(get_group_store),
 ) -> Group:
-    group = Group(id=f"q-{uuid.uuid4().hex[:12]}", name=body.name, kind="quartet")
+    group = Group(id=f"q-{uuid.uuid4().hex[:12]}", name=body.name, kind="custom")
     groups.upsert({"id": group.id, "name": group.name})
     return group
 
 
 @router.patch("/{group_id}")
-def rename_quartet(
+def rename_group(
     group_id: str,
     body: GroupUpdate,
     _: Member = Depends(require_role("admin")),
     groups: DocStore = Depends(get_group_store),
 ) -> Group:
-    doc = load_quartet(groups, group_id)
+    doc = load_custom(groups, group_id)
     groups.upsert({**doc, "name": body.name})
-    return Group(id=group_id, name=body.name, kind="quartet")
+    return Group(id=group_id, name=body.name, kind="custom")
 
 
 @router.delete("/{group_id}", status_code=204)
-def delete_quartet(
+def delete_group(
     group_id: str,
     _: Member = Depends(require_role("admin")),
     groups: DocStore = Depends(get_group_store),
     members: DocStore = Depends(get_store),
     rehearsals: DocStore = Depends(get_rehearsal_store),
 ) -> None:
-    load_quartet(groups, group_id)
+    load_custom(groups, group_id)
     for m in members.list_all():
         if group_id in m.get("groups", []):
             members.patch(m["id"], {("groups",): [g for g in m["groups"] if g != group_id]})
@@ -140,5 +141,5 @@ def set_group_members(
     for mid, doc, after in changes:
         members.patch(mid, {("groups",): after, ("role",): derived_role(doc["role"], after)})
     name = FIXED.get(group_id) or groups.get(group_id)["name"]
-    kind = "fixed" if group_id in FIXED else "quartet"
+    kind = "fixed" if group_id in FIXED else "custom"
     return Group(id=group_id, name=name, kind=kind, memberCount=len(wanted))

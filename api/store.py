@@ -192,5 +192,5 @@ def get_rehearsal_store() -> DocStore:
 
 @lru_cache
 def get_group_store() -> DocStore:
-    """Quartet groups (fixed groups live in code, see groups.py)."""
+    """Groups added by admins, e.g. quartets (fixed groups live in code, see groups.py)."""
     return _make_store("groups")

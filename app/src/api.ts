@@ -15,7 +15,7 @@ export interface Member {
 export interface Group {
   id: string
   name: string
-  kind: 'fixed' | 'quartet'
+  kind: 'fixed' | 'custom'
   memberCount: number
 }
 
