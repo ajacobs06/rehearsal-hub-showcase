@@ -1187,6 +1187,13 @@ a.wordmark img {
   max-width: 22rem;
 }
 
+.sign-in-options {
+  display: grid;
+  gap: 0.5rem;
+  width: 100%;
+  max-width: 18rem;
+}
+
 /* Stand-alone text links still get a 44px tap target. */
 .text-link {
   display: inline-flex;

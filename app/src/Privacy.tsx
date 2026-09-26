@@ -17,14 +17,14 @@ export default function Privacy({ back }: { back: React.ReactNode }) {
 
       <h2>What we store</h2>
       <ul>
-        <li>Your name and the email address of the Google account you sign in with.</li>
+        <li>Your name and the email address you sign in with.</li>
         <li>Your usual voice part, any different part you pick for a song, and the groups you're in (such as the auditioned chorus).</li>
         <li>How far you've got with each song (not started, learning, learned or ready).</li>
         <li>Your replies to rehearsals (going, maybe or can't go).</li>
         <li>Any feedback you send through the site.</li>
       </ul>
       <p>
-        We never see or store your Google password. Signing in uses one cookie, which is needed for the site to work. There are
+        We never see or store your password. Signing in uses one cookie, which is needed for the site to work. There are
         no advertising or analytics cookies.
       </p>
 
@@ -40,13 +40,10 @@ export default function Privacy({ back }: { back: React.ReactNode }) {
         <li>Committee members with admin access can see members' names, emails, parts, groups, progress, replies and feedback.</li>
         <li>Other members only see totals, such as how many people are going to a rehearsal, never your individual details.</li>
         <li>
-          Our service providers process it for us: Microsoft Azure stores it in France Central (in the EU) and sends invite emails,
-          and Google handles sign-in.
+          Our service providers process it for us: Microsoft Azure stores it in France Central (in the EU) and sends invite emails, and
+          Google or Microsoft (Entra External ID, for email and password accounts) handles sign-in.
         </li>
-        <li>
-          The Azure account that runs Rehearsal Hub is currently provided through the University of Birmingham, so the
-          university's IT administrators have technical access to it.
-        </li>
+        <li>The Azure account that runs Rehearsal Hub belongs to the society, not the university.</li>
       </ul>
 
       <h2>Error monitoring</h2>

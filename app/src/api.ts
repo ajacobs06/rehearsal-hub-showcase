@@ -45,13 +45,16 @@ export class ApiError extends Error {
   status: number
   reason?: string
   email?: string
+  /** On 401: whether email and password sign-in is set up. */
+  emailSignIn: boolean
 
   constructor(status: number, detail: unknown) {
-    const d = detail && typeof detail === 'object' && !Array.isArray(detail) ? (detail as Record<string, string>) : {}
-    super(d.reason ?? `HTTP ${status}`)
+    const d = detail && typeof detail === 'object' && !Array.isArray(detail) ? (detail as Record<string, unknown>) : {}
+    super(typeof d.reason === 'string' ? d.reason : `HTTP ${status}`)
     this.status = status
-    this.reason = d.reason
-    this.email = d.email
+    this.reason = typeof d.reason === 'string' ? d.reason : undefined
+    this.email = typeof d.email === 'string' ? d.email : undefined
+    this.emailSignIn = d.emailSignIn === true
   }
 }
 
@@ -350,5 +353,7 @@ export function readiness(hasScore: boolean, part: Part | null, hasTrack: boolea
   return { text: 'No score yet', ready: false }
 }
 
-export const signInUrl = '/.auth/login/google?post_login_redirect_uri=/'
+export const googleSignInUrl = '/.auth/login/google?post_login_redirect_uri=/'
+/** Any email address with a password, through the society's Entra External ID tenant. */
+export const emailSignInUrl = '/.auth/login/aad?post_login_redirect_uri=/'
 export const signOutUrl = '/.auth/logout?post_logout_redirect_uri=/'

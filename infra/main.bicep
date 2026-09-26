@@ -3,8 +3,17 @@
 // App settings are owned here: a redeploy replaces the full set, so never add settings by hand.
 // Secrets live in Key Vault and are referenced from app settings.
 
-@description('The Azure for Students subscription only allows a few EU regions; France Central is the closest.')
+@description('France Central (EU). UK South and UK West had no free App Service or Cosmos capacity for a new subscription.')
 param location string = 'francecentral'
+
+@description('Web app name, which is also the address: https://<appName>.azurewebsites.net. Globally unique; fixed once created.')
+param appName string
+
+@description('Budget alerts go here (at $5 and $20 actual spend a month).')
+param budgetEmail string
+
+@description('First day of the month the budget starts, e.g. 2026-10-01. Fixed once created.')
+param budgetStartDate string
 
 @description('Object ID of the developer, granted access to the dev database and Key Vault secrets.')
 param developerPrincipalId string
@@ -15,8 +24,15 @@ param githubSubjectPrefix string = 'repo:ajacobs06@222806665/rehearsal-hub@13883
 @description('Google OAuth client ID. Leave empty to deploy without sign-in enabled.')
 param googleClientId string = ''
 
+@description('Entra External ID tenant (email and password sign-in) ID. Leave empty to offer Google only.')
+param entraTenantId string = ''
+
+@description('Client ID of the Rehearsal Hub app registration in that external tenant.')
+param entraClientId string = ''
+
+var entraEnabled = !empty(entraTenantId) && !empty(entraClientId)
+
 var suffix = uniqueString(resourceGroup().id)
-var appName = 'rehearsal-hub-${suffix}'
 
 // Built-in role and Cosmos data-plane role IDs.
 var keyVaultSecretsUser = '4633458b-17de-408a-b874-0445c86b69e6'
@@ -63,7 +79,7 @@ resource site 'Microsoft.Web/sites@2023-12-01' = {
 resource appSettings 'Microsoft.Web/sites/config@2023-12-01' = {
   parent: site
   name: 'appsettings'
-  properties: {
+  properties: union({
     SCM_DO_BUILD_DURING_DEPLOYMENT: 'true'
     APP_URL: 'https://${site.properties.defaultHostName}'
     COSMOS_ENDPOINT: cosmos.properties.documentEndpoint
@@ -74,7 +90,11 @@ resource appSettings 'Microsoft.Web/sites/config@2023-12-01' = {
     STORAGE_ACCOUNT_URL: storage.properties.primaryEndpoints.blob
     TRACKS_CONTAINER: tracksContainer.name
     APPLICATIONINSIGHTS_CONNECTION_STRING: insights.properties.ConnectionString
-  }
+  }, entraEnabled ? {
+    // The API only trusts "aad" sign-ins from this tenant (api/auth.py).
+    ENTRA_TENANT_ID: entraTenantId
+    MICROSOFT_PROVIDER_AUTHENTICATION_SECRET: '@Microsoft.KeyVault(VaultName=${vault.name};SecretName=entra-client-secret)'
+  } : {})
   dependsOn: [appVaultAccess]
 }
 
@@ -96,8 +116,8 @@ resource ftpPolicy 'Microsoft.Web/sites/basicPublishingCredentialsPolicies@2023-
 }
 
 // ---------- Deploy identity (GitHub Actions OIDC, no stored secret) ----------
-// A user-assigned identity instead of an app registration (the UoB tenant blocks those). It trusts
-// only jobs in this repo's `production` environment and can only manage this web app.
+// A user-assigned identity instead of an app registration: no secret to rotate. It trusts only
+// jobs in this repo's `production` environment and can only manage this web app.
 
 resource deployIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
   name: 'id-rehearsal-hub-deploy'
@@ -126,7 +146,7 @@ resource deployAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
 
 output deployClientId string = deployIdentity.properties.clientId
 
-// Easy Auth: Google sign-in. Anonymous requests are allowed so the app shell and /api/health load;
+// Easy Auth: Google sign-in, plus email and password through our Entra External ID tenant. Anonymous requests are allowed so the app shell and /api/health load;
 // the API decides per endpoint. Easy Auth strips client-supplied X-MS-CLIENT-PRINCIPAL headers.
 resource auth 'Microsoft.Web/sites/config@2023-12-01' = if (!empty(googleClientId)) {
   parent: site
@@ -139,7 +159,7 @@ resource auth 'Microsoft.Web/sites/config@2023-12-01' = if (!empty(googleClientI
       requireAuthentication: false
       unauthenticatedClientAction: 'AllowAnonymous'
     }
-    identityProviders: {
+    identityProviders: union({
       google: {
         enabled: true
         registration: {
@@ -150,7 +170,23 @@ resource auth 'Microsoft.Web/sites/config@2023-12-01' = if (!empty(googleClientI
           scopes: ['openid', 'email', 'profile']
         }
       }
-    }
+    }, entraEnabled ? {
+      // Pinned to our external tenant's issuer, so work or school accounts from other tenants can't sign in.
+      azureActiveDirectory: {
+        enabled: true
+        registration: {
+          openIdIssuer: 'https://${entraTenantId}.ciamlogin.com/${entraTenantId}/v2.0'
+          clientId: entraClientId
+          clientSecretSettingName: 'MICROSOFT_PROVIDER_AUTHENTICATION_SECRET'
+        }
+        login: {
+          loginParameters: ['scope=openid profile email']
+        }
+        validation: {
+          allowedAudiences: [entraClientId]
+        }
+      }
+    } : {})
     login: {
       // The app never uses provider tokens; keeping them would expose them via /.auth/me.
       tokenStore: {
@@ -742,5 +778,42 @@ resource cosmosAudit 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' 
         enabled: true
       }
     ]
+  }
+}
+
+// ---------- Budget ----------
+// Pay-As-You-Go bills real money, so alert well before anything costs much. Everything here is
+// meant to stay on free tiers; any spend at all means something has changed.
+
+resource budget 'Microsoft.Consumption/budgets@2023-11-01' = {
+  name: 'rehearsal-hub-monthly'
+  properties: {
+    category: 'Cost'
+    amount: 20
+    timeGrain: 'Monthly'
+    timePeriod: {
+      startDate: budgetStartDate
+    }
+    notifications: {
+      actual_5usd: {
+        enabled: true
+        operator: 'GreaterThanOrEqualTo'
+        threshold: 25
+        contactEmails: [budgetEmail]
+      }
+      actual_20usd: {
+        enabled: true
+        operator: 'GreaterThanOrEqualTo'
+        threshold: 100
+        contactEmails: [budgetEmail]
+      }
+      forecast_20usd: {
+        enabled: true
+        operator: 'GreaterThanOrEqualTo'
+        threshold: 100
+        thresholdType: 'Forecasted'
+        contactEmails: [budgetEmail]
+      }
+    }
   }
 }

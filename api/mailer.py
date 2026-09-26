@@ -30,7 +30,7 @@ class AcsMailer:
             f"Hi {name},\n\n"
             f"{invited_by} has invited you to Rehearsal Hub, the UoB Barbershop Singing Society's "
             "members' site for learning tracks and the rehearsal schedule.\n\n"
-            f"Sign in with Google using this email address ({to}):\n{self.app_url}\n\n"
+            f"Sign in with Google, or with this email address and a password you create ({to}):\n{self.app_url}\n\n"
             "If you weren't expecting this, you can ignore it."
         )
         try:

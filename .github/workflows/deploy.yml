@@ -11,7 +11,8 @@ permissions:
   contents: read
 
 env:
-  AZURE_WEBAPP_NAME: rehearsal-hub-<suffix>
+  # Repo variable, set with the other AZURE_* ones (the web app's name in infra/main.bicepparam).
+  AZURE_WEBAPP_NAME: ${{ vars.AZURE_WEBAPP_NAME }}
 
 jobs:
   build:

@@ -126,7 +126,7 @@ function InviteForm({ me, groups, onInvited }: { me: Member; groups: Group[] | n
         <label>
           Email
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="off" />
-          <span className="hint">The Google account they'll sign in with.</span>
+          <span className="hint">Any email. They sign in with Google or create a password for it.</span>
         </label>
         <label>
           Part

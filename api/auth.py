@@ -14,11 +14,13 @@ from store import DocStore, get_group_store, get_store, on_app_service
 
 CLAIM_ID = "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier"
 CLAIM_EMAIL = "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress"
+CLAIM_OID = "http://schemas.microsoft.com/identity/claims/objectidentifier"
+CLAIM_TID = "http://schemas.microsoft.com/identity/claims/tenantid"
 
 # Sign-in providers whose email claims we trust. Invites and owner bootstrap match on email, so a
 # provider that lets people set an unverified email (e.g. GitHub) must never be added here.
-# Adding UoB (Entra, "aad") later means adding it here too.
-ALLOWED_PROVIDERS = {"google"}
+# "aad" is our own Entra External ID tenant (email and password), trusted only from ENTRA_TENANT_ID.
+ALLOWED_PROVIDERS = {"google", "aad"}
 
 log = logging.getLogger(__name__)
 
@@ -39,15 +41,35 @@ def parse_client_principal(header: str) -> Principal | None:
     claims: dict[str, str] = {}
     for c in data.get("claims", []):
         claims.setdefault(c.get("typ", ""), c.get("val", ""))
-    user_id = claims.get(CLAIM_ID) or claims.get("sub")
     email = (claims.get(CLAIM_EMAIL) or claims.get("email") or "").strip().lower()
     idp = data.get("auth_typ")
-    if idp not in ALLOWED_PROVIDERS:
+    if idp == "google":
+        user_id = claims.get(CLAIM_ID) or claims.get("sub")
+        # Must be present and true: a missing claim is not a verified email.
+        if claims.get("email_verified", "").lower() != "true":
+            return None
+    elif idp == "aad":
+        user_id = claims.get(CLAIM_OID) or claims.get("oid")
+        if not entra_account_trusted(claims.get(CLAIM_TID) or claims.get("tid")):
+            return None
+    else:
         return None
-    # Must be present and true: a missing claim is not a verified email.
-    if not user_id or not email or claims.get("email_verified", "").lower() != "true":
+    if not user_id or not email:
         return None
     return Principal(member_id=f"{idp}:{user_id}", email=email, name=claims.get("name") or email)
+
+
+def email_sign_in_enabled() -> bool:
+    """Set (with the Entra provider) by infra/main.bicep once the external tenant exists."""
+    return bool(os.environ.get("ENTRA_TENANT_ID", "").strip())
+
+
+def entra_account_trusted(tenant_id: str | None) -> bool:
+    """Entra sends no email_verified claim. Our external tenant only lets people sign up with an
+    email and password after proving the address with a one-time code, so its emails are verified.
+    Any other tenant's (e.g. a work account where an admin can type in any email) are not."""
+    expected = os.environ.get("ENTRA_TENANT_ID", "").strip().lower()
+    return bool(expected) and (tenant_id or "").strip().lower() == expected
 
 
 def easy_auth_enabled() -> bool:
@@ -88,7 +110,8 @@ def current_member(
     groups: DocStore = Depends(get_group_store),
 ) -> Member:
     if principal is None:
-        raise HTTPException(401, detail={"reason": "not_signed_in"})
+        # Tells the welcome page whether to offer email and password sign-in yet.
+        raise HTTPException(401, detail={"reason": "not_signed_in", "emailSignIn": email_sign_in_enabled()})
 
     existing = store.get(principal.member_id)
     if existing:

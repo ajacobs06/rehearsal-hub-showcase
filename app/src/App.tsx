@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ApiError, api, signInUrl, signOutUrl, type Member } from './api'
+import { ApiError, api, emailSignInUrl, googleSignInUrl, signOutUrl, type Member } from './api'
 
 // The BSS badge, used as-is: never recoloured, stretched or cropped.
 const LOGO = '/bss-logo.png'
@@ -16,7 +16,7 @@ import Songs from './Songs'
 
 type Session =
   | { kind: 'loading' }
-  | { kind: 'signed-out' }
+  | { kind: 'signed-out'; emailSignIn: boolean }
   | { kind: 'not-invited'; email: string }
   | { kind: 'error' }
   | { kind: 'member'; member: Member }
@@ -45,7 +45,7 @@ export default function App() {
       .me()
       .then((member) => setSession({ kind: 'member', member }))
       .catch((err: unknown) => {
-        if (err instanceof ApiError && err.status === 401) setSession({ kind: 'signed-out' })
+        if (err instanceof ApiError && err.status === 401) setSession({ kind: 'signed-out', emailSignIn: err.emailSignIn })
         else if (err instanceof ApiError && err.reason === 'not_invited')
           setSession({ kind: 'not-invited', email: err.email ?? '' })
         else setSession({ kind: 'error' })
@@ -93,10 +93,23 @@ export default function App() {
           </p>
         </div>
         <div className="gate-action">
-          <a className="button" href={signInUrl}>
-            Sign in with Google
-          </a>
-          <p className="muted small">Not on the list yet? Ask the committee to invite the Google account you'll use.</p>
+          <div className="sign-in-options">
+            <a className="button" href={googleSignInUrl}>
+              Sign in with Google
+            </a>
+            {session.emailSignIn && (
+              <a className="button secondary" href={emailSignInUrl}>
+                Sign in with email
+              </a>
+            )}
+          </div>
+          {session.emailSignIn && (
+            <p className="muted small">
+              Use the email address you were invited with. First time with email? Choose Sign in with email, then create an
+              account.
+            </p>
+          )}
+          <p className="muted small">Not on the list yet? Ask the committee to invite the email you'll use.</p>
           <a className="small text-link" {...internalLink('/privacy', navigate)}>
             Privacy notice
           </a>
@@ -113,7 +126,7 @@ export default function App() {
         <p className="lede">
           You're signed in as <strong>{session.email}</strong>, but that address hasn't been invited.
         </p>
-        <p>Ask a committee member to invite this address, or sign out and try a different Google account.</p>
+        <p>Ask a committee member to invite this address, or sign out and try a different account.</p>
         <a className="button secondary" href={signOutUrl}>
           Sign out
         </a>
