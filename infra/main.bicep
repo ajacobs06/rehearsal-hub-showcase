@@ -1,10 +1,29 @@
-// Free (F1) Linux App Service hosting the FastAPI backend and the built React front end.
-// Deploy: az deployment group create -g rg-rehearsal-hub -f infra/main.bicep
+// Rehearsal Hub infrastructure. Deploy:
+//   az deployment group create -g rg-rehearsal-hub -f infra/main.bicep -p infra/main.bicepparam
+// App settings are owned here: a redeploy replaces the full set, so never add settings by hand.
+// Secrets live in Key Vault and are referenced from app settings.
 
 @description('The Azure for Students subscription only allows a few EU regions; France Central is the closest.')
 param location string = 'francecentral'
 
-param name string = 'rehearsal-hub-${uniqueString(resourceGroup().id)}'
+@description('Email that becomes owner on first sign-in when no member record exists for it.')
+param bootstrapOwnerEmail string
+
+@description('Object ID of the developer, granted access to the dev database and Key Vault secrets.')
+param developerPrincipalId string
+
+@description('Google OAuth client ID. Leave empty to deploy without sign-in enabled.')
+param googleClientId string = ''
+
+var suffix = uniqueString(resourceGroup().id)
+var appName = 'rehearsal-hub-${suffix}'
+
+// Built-in role and Cosmos data-plane role IDs.
+var keyVaultSecretsUser = '4633458b-17de-408a-b874-0445c86b69e6'
+var keyVaultSecretsOfficer = 'b86a8fe4-44ce-4948-aee5-eccb2c155cd7'
+var cosmosDataContributor = '00000000-0000-0000-0000-000000000002'
+
+// ---------- Web app ----------
 
 resource plan 'Microsoft.Web/serverfarms@2023-12-01' = {
   name: 'asp-rehearsal-hub'
@@ -20,7 +39,7 @@ resource plan 'Microsoft.Web/serverfarms@2023-12-01' = {
 }
 
 resource site 'Microsoft.Web/sites@2023-12-01' = {
-  name: name
+  name: appName
   location: location
   kind: 'app,linux'
   identity: {
@@ -34,14 +53,24 @@ resource site 'Microsoft.Web/sites@2023-12-01' = {
       appCommandLine: 'gunicorn -w 2 -k uvicorn.workers.UvicornWorker main:app'
       ftpsState: 'Disabled'
       minTlsVersion: '1.2'
-      appSettings: [
-        {
-          name: 'SCM_DO_BUILD_DURING_DEPLOYMENT'
-          value: 'true'
-        }
-      ]
     }
   }
+}
+
+resource appSettings 'Microsoft.Web/sites/config@2023-12-01' = {
+  parent: site
+  name: 'appsettings'
+  properties: {
+    SCM_DO_BUILD_DURING_DEPLOYMENT: 'true'
+    APP_URL: 'https://${site.properties.defaultHostName}'
+    BOOTSTRAP_OWNER_EMAIL: bootstrapOwnerEmail
+    COSMOS_ENDPOINT: cosmos.properties.documentEndpoint
+    COSMOS_DATABASE: prodDb.name
+    EMAIL_SENDER: 'DoNotReply@${emailDomain.properties.mailFromSenderDomain}'
+    ACS_CONNECTION_STRING: '@Microsoft.KeyVault(VaultName=${vault.name};SecretName=${acsSecret.name})'
+    GOOGLE_PROVIDER_AUTHENTICATION_SECRET: '@Microsoft.KeyVault(VaultName=${vault.name};SecretName=google-client-secret)'
+  }
+  dependsOn: [appVaultAccess]
 }
 
 // GitHub Actions deploys with the publish profile, which needs SCM basic auth.
@@ -53,5 +82,217 @@ resource scmPolicy 'Microsoft.Web/sites/basicPublishingCredentialsPolicies@2023-
   }
 }
 
+// Easy Auth: Google sign-in. Anonymous requests are allowed so the app shell and /api/health load;
+// the API decides per endpoint. Easy Auth strips client-supplied X-MS-CLIENT-PRINCIPAL headers.
+resource auth 'Microsoft.Web/sites/config@2023-12-01' = if (!empty(googleClientId)) {
+  parent: site
+  name: 'authsettingsV2'
+  properties: {
+    platform: {
+      enabled: true
+    }
+    globalValidation: {
+      requireAuthentication: false
+      unauthenticatedClientAction: 'AllowAnonymous'
+    }
+    identityProviders: {
+      google: {
+        enabled: true
+        registration: {
+          clientId: googleClientId
+          clientSecretSettingName: 'GOOGLE_PROVIDER_AUTHENTICATION_SECRET'
+        }
+        login: {
+          scopes: ['openid', 'email', 'profile']
+        }
+      }
+    }
+    login: {
+      tokenStore: {
+        enabled: true
+      }
+    }
+  }
+  dependsOn: [appSettings]
+}
+
+// ---------- Cosmos DB (free tier) ----------
+
+resource cosmos 'Microsoft.DocumentDB/databaseAccounts@2024-11-15' = {
+  name: 'cosmos-rehearsal-hub-${suffix}'
+  location: location
+  kind: 'GlobalDocumentDB'
+  properties: {
+    databaseAccountOfferType: 'Standard'
+    enableFreeTier: true
+    disableLocalAuth: true
+    minimalTlsVersion: 'Tls12'
+    consistencyPolicy: {
+      defaultConsistencyLevel: 'Session'
+    }
+    locations: [
+      {
+        locationName: location
+        failoverPriority: 0
+        isZoneRedundant: false
+      }
+    ]
+    // Free tier covers 1000 RU/s; cap it so the account can never bill for throughput.
+    capacity: {
+      totalThroughputLimit: 1000
+    }
+  }
+}
+
+resource prodDb 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases@2024-11-15' = {
+  parent: cosmos
+  name: 'rehearsal-hub'
+  properties: {
+    resource: {
+      id: 'rehearsal-hub'
+    }
+    options: {
+      throughput: 600
+    }
+  }
+}
+
+resource devDb 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases@2024-11-15' = {
+  parent: cosmos
+  name: 'rehearsal-hub-dev'
+  properties: {
+    resource: {
+      id: 'rehearsal-hub-dev'
+    }
+    options: {
+      throughput: 400
+    }
+  }
+}
+
+resource prodMembers 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-11-15' = {
+  parent: prodDb
+  name: 'members'
+  properties: {
+    resource: {
+      id: 'members'
+      partitionKey: {
+        paths: ['/id']
+        kind: 'Hash'
+      }
+    }
+  }
+}
+
+resource devMembers 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-11-15' = {
+  parent: devDb
+  name: 'members'
+  properties: {
+    resource: {
+      id: 'members'
+      partitionKey: {
+        paths: ['/id']
+        kind: 'Hash'
+      }
+    }
+  }
+}
+
+resource appCosmosAccess 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2024-11-15' = {
+  parent: cosmos
+  name: guid(cosmos.id, site.id, cosmosDataContributor)
+  properties: {
+    roleDefinitionId: '${cosmos.id}/sqlRoleDefinitions/${cosmosDataContributor}'
+    principalId: site.identity.principalId
+    scope: '${cosmos.id}/dbs/${prodDb.name}'
+  }
+}
+
+resource devCosmosAccess 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2024-11-15' = {
+  parent: cosmos
+  name: guid(cosmos.id, developerPrincipalId, cosmosDataContributor)
+  properties: {
+    roleDefinitionId: '${cosmos.id}/sqlRoleDefinitions/${cosmosDataContributor}'
+    principalId: developerPrincipalId
+    scope: '${cosmos.id}/dbs/${devDb.name}'
+  }
+}
+
+// ---------- Email (Azure Communication Services) ----------
+
+resource emailService 'Microsoft.Communication/emailServices@2023-04-01' = {
+  name: 'email-rehearsal-hub-${suffix}'
+  location: 'global'
+  properties: {
+    dataLocation: 'Europe'
+  }
+}
+
+resource emailDomain 'Microsoft.Communication/emailServices/domains@2023-04-01' = {
+  parent: emailService
+  name: 'AzureManagedDomain'
+  location: 'global'
+  properties: {
+    domainManagement: 'AzureManaged'
+    userEngagementTracking: 'Disabled'
+  }
+}
+
+resource acs 'Microsoft.Communication/communicationServices@2023-04-01' = {
+  name: 'acs-rehearsal-hub-${suffix}'
+  location: 'global'
+  properties: {
+    dataLocation: 'Europe'
+    linkedDomains: [emailDomain.id]
+  }
+}
+
+// ---------- Key Vault ----------
+
+resource vault 'Microsoft.KeyVault/vaults@2023-07-01' = {
+  name: 'kv-rh-${take(suffix, 13)}'
+  location: location
+  properties: {
+    tenantId: subscription().tenantId
+    sku: {
+      family: 'A'
+      name: 'standard'
+    }
+    enableRbacAuthorization: true
+    softDeleteRetentionInDays: 7
+  }
+}
+
+resource acsSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+  parent: vault
+  name: 'acs-connection-string'
+  properties: {
+    value: acs.listKeys().primaryConnectionString
+  }
+}
+
+resource appVaultAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: vault
+  name: guid(vault.id, site.id, keyVaultSecretsUser)
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultSecretsUser)
+    principalId: site.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource devVaultAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: vault
+  name: guid(vault.id, developerPrincipalId, keyVaultSecretsOfficer)
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultSecretsOfficer)
+    principalId: developerPrincipalId
+    principalType: 'User'
+  }
+}
+
 output name string = site.name
 output defaultHostname string = site.properties.defaultHostName
+output cosmosEndpoint string = cosmos.properties.documentEndpoint
+output keyVaultName string = vault.name
+output emailSender string = 'DoNotReply@${emailDomain.properties.mailFromSenderDomain}'

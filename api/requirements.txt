@@ -1,3 +1,7 @@
 fastapi==0.141.1
 uvicorn==0.54.0
 gunicorn==26.2.0
+email-validator==2.3.0
+azure-cosmos==4.17.1
+azure-identity==1.25.3
+azure-communication-email==1.1.0
