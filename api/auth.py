@@ -38,10 +38,15 @@ def parse_client_principal(header: str) -> Principal | None:
     return Principal(member_id=f"{idp}:{user_id}", email=email, name=claims.get("name") or email)
 
 
+def easy_auth_enabled() -> bool:
+    """App Service sets this when built-in auth is on."""
+    return os.environ.get("WEBSITE_AUTH_ENABLED", "").lower() == "true"
+
+
 def get_principal(request: Request) -> Principal | None:
     # Easy Auth strips client-supplied X-MS-* headers only when it is enabled, so the header is
     # trusted only then. Anywhere else it could be forged.
-    if os.environ.get("WEBSITE_AUTH_ENABLED", "").lower() == "true":
+    if easy_auth_enabled():
         header = request.headers.get("x-ms-client-principal")
         return parse_client_principal(header) if header else None
     dev_email = os.environ.get("DEV_USER_EMAIL")

@@ -6,9 +6,9 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from auth import current_member, now, require_role
+from auth import current_member, easy_auth_enabled, now, require_role
 from mailer import Mailer, get_mailer
-from models import ROLE_RANK, InviteRequest, InviteResponse, Member, MemberUpdate, Role
+from models import ROLE_RANK, InviteRequest, InviteResponse, MeUpdate, Member, MemberUpdate, Role
 from store import MemberStore, get_store
 
 # The React build is copied here at deploy time (see .github/workflows/deploy.yml).
@@ -18,8 +18,13 @@ app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
 
 @app.get("/api/health")
-def health() -> dict[str, str]:
-    return {"status": "ok", "time": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+def health() -> dict[str, str | bool]:
+    # easyAuth: whether the API trusts sign-in headers. Must be true in production.
+    return {
+        "status": "ok",
+        "time": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "easyAuth": easy_auth_enabled(),
+    }
 
 
 # ---------- Current member ----------
@@ -32,18 +37,21 @@ def get_me(member: Member = Depends(current_member)) -> Member:
 
 @app.patch("/api/me")
 def update_me(
-    body: MemberUpdate,
+    body: MeUpdate,
     member: Member = Depends(current_member),
     store: MemberStore = Depends(get_store),
 ) -> Member:
-    if body.role is not None and body.role != member.role:
-        raise HTTPException(400, detail={"reason": "cannot_change_own_role"})
-    updated = member.model_copy(update=body.model_dump(exclude_unset=True, exclude={"role"}))
+    updated = apply_update(member, body.model_dump(exclude_unset=True))
     store.upsert(updated.model_dump())
     return updated
 
 
 # ---------- Member management (admin) ----------
+
+
+def apply_update(member: Member, changes: dict) -> Member:
+    """Merge changes and re-validate the whole record before it is stored."""
+    return Member.model_validate({**member.model_dump(), **changes})
 
 
 def can_manage(actor: Member, role: Role) -> bool:
@@ -104,7 +112,7 @@ def update_member(
             raise HTTPException(400, detail={"reason": "cannot_change_own_role"})
         if not can_manage(actor, body.role):
             raise HTTPException(403, detail={"reason": "forbidden"})
-    updated = target.model_copy(update=body.model_dump(exclude_unset=True))
+    updated = apply_update(target, body.model_dump(exclude_unset=True))
     store.upsert(updated.model_dump())
     return updated
 

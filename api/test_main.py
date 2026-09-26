@@ -126,7 +126,49 @@ def test_invite_is_claimed_on_first_sign_in(store: InMemoryMemberStore, mailer: 
 def test_update_me_sets_part_but_not_role(store: InMemoryMemberStore) -> None:
     me = add_member(store, "m@example.com", "member")
     assert client.patch("/api/me", headers=me, json={"part": "tenor"}).json()["part"] == "tenor"
-    assert client.patch("/api/me", headers=me, json={"role": "owner"}).status_code == 400
+    for body in ({"role": "owner"}, {"role": "member"}, {"status": "active"}, {"id": "google:other"}):
+        assert client.patch("/api/me", headers=me, json=body).status_code == 422
+    assert store.get("google:sub-m@example.com")["role"] == "member"
+
+
+# ---------- Input validation ----------
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"name": None},
+        {"role": None},
+        {"name": "   "},
+        {"name": "x" * 101},
+        {"part": "soprano"},
+        {"role": "superadmin"},
+        {"status": "invited"},
+        {"email": "new@example.com"},
+    ],
+)
+def test_member_update_rejects_bad_input(store: InMemoryMemberStore, body: dict) -> None:
+    owner = add_member(store, OWNER_EMAIL, "owner")
+    add_member(store, "m@example.com", "member")
+    res = client.patch("/api/members/google:sub-m@example.com", headers=owner, json=body)
+    assert res.status_code == 422
+    assert store.get("google:sub-m@example.com")["name"] == "M"
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"email": "not-an-email", "name": "X"},
+        {"email": "x@example.com", "name": "  "},
+        {"email": "x@example.com", "name": "X", "status": "active"},
+        {"email": "x@example.com", "name": "X", "id": "google:forged"},
+        {"email": "x@example.com", "name": "X", "role": "superadmin"},
+    ],
+)
+def test_invite_rejects_bad_input(store: InMemoryMemberStore, mailer: FakeMailer, body: dict) -> None:
+    owner = add_member(store, OWNER_EMAIL, "owner")
+    assert client.post("/api/members", headers=owner, json=body).status_code == 422
+    assert mailer.sent == []
 
 
 # ---------- Role enforcement ----------
@@ -183,6 +225,29 @@ def test_admin_manages_members(store: InMemoryMemberStore) -> None:
     assert client.patch(target, headers=admin, json={"role": "admin"}).status_code == 403
     assert client.delete(target, headers=admin).status_code == 204
     assert store.get("google:sub-m@example.com") is None
+
+
+def test_admin_cannot_promote_self(store: InMemoryMemberStore) -> None:
+    admin = add_member(store, "admin@example.com", "admin")
+    res = client.patch("/api/members/google:sub-admin@example.com", headers=admin, json={"role": "owner"})
+    assert res.status_code == 403
+    assert store.get("google:sub-admin@example.com")["role"] == "admin"
+
+
+def test_admin_cannot_touch_owner(store: InMemoryMemberStore) -> None:
+    admin = add_member(store, "admin@example.com", "admin")
+    add_member(store, OWNER_EMAIL, "owner")
+    target = f"/api/members/google:sub-{OWNER_EMAIL}"
+    assert client.patch(target, headers=admin, json={"role": "member"}).status_code == 403
+    assert client.delete(target, headers=admin).status_code == 403
+    assert store.get(f"google:sub-{OWNER_EMAIL}")["role"] == "owner"
+
+
+def test_member_cannot_edit_self_via_admin_endpoint(store: InMemoryMemberStore) -> None:
+    member = add_member(store, "m@example.com", "member")
+    res = client.patch("/api/members/google:sub-m@example.com", headers=member, json={"role": "admin"})
+    assert res.status_code == 403
+    assert store.get("google:sub-m@example.com")["role"] == "member"
 
 
 def test_owner_cannot_change_own_role_or_delete_self(store: InMemoryMemberStore) -> None:
