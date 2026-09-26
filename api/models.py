@@ -64,3 +64,58 @@ class MemberUpdate(Request):
 class InviteResponse(BaseModel):
     member: Member
     emailed: bool
+
+
+# ---------- Songs ----------
+
+SongStatus = Literal["learning", "performing", "retired"]
+FileKind = Literal["tenor", "lead", "bari", "bass", "full", "score"]
+AUDIO_KINDS: tuple[str, ...] = ("tenor", "lead", "bari", "bass", "full")
+
+
+class SongFile(BaseModel):
+    size: int
+    uploadedAt: str
+
+
+class Song(BaseModel):
+    id: str
+    title: str = Field(min_length=1, max_length=120)
+    arranger: str | None = Field(default=None, max_length=120)
+    key: str | None = Field(default=None, max_length=20)
+    status: SongStatus = "learning"
+    files: dict[FileKind, SongFile] = {}
+    createdAt: str
+
+
+class SongCreate(Request):
+    title: str = Field(min_length=1, max_length=120)
+    arranger: str | None = Field(default=None, max_length=120)
+    key: str | None = Field(default=None, max_length=20)
+    status: SongStatus = "learning"
+
+
+class SongUpdate(Request):
+    title: str | None = Field(default=None, min_length=1, max_length=120)
+    arranger: str | None = Field(default=None, max_length=120)
+    key: str | None = Field(default=None, max_length=20)
+    status: SongStatus | None = None
+
+    @field_validator("title", "status")
+    @classmethod
+    def not_null(cls, v: str | None) -> str:
+        if v is None:
+            raise ValueError("cannot be null")
+        return v
+
+
+class UploadTicket(BaseModel):
+    url: str
+    contentType: str
+    maxBytes: int
+    expiresAt: str
+
+
+class FileLink(BaseModel):
+    url: str
+    expiresAt: str

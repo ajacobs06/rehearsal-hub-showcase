@@ -22,6 +22,8 @@ var appName = 'rehearsal-hub-${suffix}'
 var keyVaultSecretsUser = '4633458b-17de-408a-b874-0445c86b69e6'
 var keyVaultSecretsOfficer = 'b86a8fe4-44ce-4948-aee5-eccb2c155cd7'
 var cosmosDataContributor = '00000000-0000-0000-0000-000000000002'
+var storageBlobDataContributor = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
+var storageBlobDelegator = 'db58b8e5-c6ad-4a2a-8342-4190687cbf4a'
 
 // ---------- Web app ----------
 
@@ -69,6 +71,8 @@ resource appSettings 'Microsoft.Web/sites/config@2023-12-01' = {
     EMAIL_SENDER: 'DoNotReply@${emailDomain.properties.mailFromSenderDomain}'
     ACS_CONNECTION_STRING: '@Microsoft.KeyVault(VaultName=${vault.name};SecretName=${acsSecret.name})'
     GOOGLE_PROVIDER_AUTHENTICATION_SECRET: '@Microsoft.KeyVault(VaultName=${vault.name};SecretName=google-client-secret)'
+    STORAGE_ACCOUNT_URL: storage.properties.primaryEndpoints.blob
+    TRACKS_CONTAINER: tracksContainer.name
   }
   dependsOn: [appVaultAccess]
 }
@@ -198,6 +202,34 @@ resource devMembers 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containe
   }
 }
 
+resource prodSongs 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-11-15' = {
+  parent: prodDb
+  name: 'songs'
+  properties: {
+    resource: {
+      id: 'songs'
+      partitionKey: {
+        paths: ['/id']
+        kind: 'Hash'
+      }
+    }
+  }
+}
+
+resource devSongs 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-11-15' = {
+  parent: devDb
+  name: 'songs'
+  properties: {
+    resource: {
+      id: 'songs'
+      partitionKey: {
+        paths: ['/id']
+        kind: 'Hash'
+      }
+    }
+  }
+}
+
 resource appCosmosAccess 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2024-11-15' = {
   parent: cosmos
   name: guid(cosmos.id, site.id, cosmosDataContributor)
@@ -215,6 +247,106 @@ resource devCosmosAccess 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignmen
     roleDefinitionId: '${cosmos.id}/sqlRoleDefinitions/${cosmosDataContributor}'
     principalId: developerPrincipalId
     scope: '${cosmos.id}/dbs/${devDb.name}'
+  }
+}
+
+// ---------- Blob Storage (tracks and scores) ----------
+// No public access and no shared keys: the browser gets per-blob user delegation SAS links
+// signed with the web app's managed identity, and talks to Blob Storage directly.
+
+resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
+  name: 'strh${suffix}'
+  location: location
+  kind: 'StorageV2'
+  sku: {
+    name: 'Standard_LRS'
+  }
+  properties: {
+    accessTier: 'Hot'
+    allowBlobPublicAccess: false
+    allowSharedKeyAccess: false
+    defaultToOAuthAuthentication: true
+    minimumTlsVersion: 'TLS1_2'
+    supportsHttpsTrafficOnly: true
+  }
+}
+
+resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01' = {
+  parent: storage
+  name: 'default'
+  properties: {
+    deleteRetentionPolicy: {
+      enabled: true
+      days: 7
+    }
+    cors: {
+      corsRules: [
+        {
+          allowedOrigins: ['https://${site.properties.defaultHostName}', 'http://localhost:5173']
+          allowedMethods: ['GET', 'HEAD', 'PUT', 'OPTIONS']
+          allowedHeaders: ['*']
+          exposedHeaders: ['*']
+          maxAgeInSeconds: 3600
+        }
+      ]
+    }
+  }
+}
+
+resource tracksContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+  parent: blobService
+  name: 'tracks'
+  properties: {
+    publicAccess: 'None'
+  }
+}
+
+resource devTracksContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+  parent: blobService
+  name: 'tracks-dev'
+  properties: {
+    publicAccess: 'None'
+  }
+}
+
+// User delegation keys are issued at account level; data access is scoped to one container each.
+resource appBlobDelegator 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: storage
+  name: guid(storage.id, site.id, storageBlobDelegator)
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDelegator)
+    principalId: site.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource appTracksAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: tracksContainer
+  name: guid(tracksContainer.id, site.id, storageBlobDataContributor)
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDataContributor)
+    principalId: site.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource devBlobDelegator 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: storage
+  name: guid(storage.id, developerPrincipalId, storageBlobDelegator)
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDelegator)
+    principalId: developerPrincipalId
+    principalType: 'User'
+  }
+}
+
+resource devTracksAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: devTracksContainer
+  name: guid(devTracksContainer.id, developerPrincipalId, storageBlobDataContributor)
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDataContributor)
+    principalId: developerPrincipalId
+    principalType: 'User'
   }
 }
 
@@ -295,4 +427,5 @@ output name string = site.name
 output defaultHostname string = site.properties.defaultHostName
 output cosmosEndpoint string = cosmos.properties.documentEndpoint
 output keyVaultName string = vault.name
+output storageUrl string = storage.properties.primaryEndpoints.blob
 output emailSender string = 'DoNotReply@${emailDomain.properties.mailFromSenderDomain}'

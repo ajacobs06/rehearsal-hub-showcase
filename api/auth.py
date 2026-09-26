@@ -8,7 +8,7 @@ from typing import Callable
 from fastapi import Depends, HTTPException, Request
 
 from models import ROLE_RANK, Member, Role
-from store import MemberStore, get_store, on_app_service
+from store import DocStore, get_store, on_app_service
 
 CLAIM_ID = "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier"
 CLAIM_EMAIL = "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress"
@@ -62,7 +62,7 @@ def now() -> str:
 
 def current_member(
     principal: Principal | None = Depends(get_principal),
-    store: MemberStore = Depends(get_store),
+    store: DocStore = Depends(get_store),
 ) -> Member:
     if principal is None:
         raise HTTPException(401, detail={"reason": "not_signed_in"})
@@ -72,7 +72,7 @@ def current_member(
         return Member(**existing)
 
     # First sign-in: claim an invite for this email, or bootstrap the owner.
-    invite = next((d for d in store.find_by_email(principal.email) if d["status"] == "invited"), None)
+    invite = next((d for d in store.find("email", principal.email) if d["status"] == "invited"), None)
     if invite:
         doc = {**invite, "id": principal.member_id, "status": "active"}
         store.upsert(doc)

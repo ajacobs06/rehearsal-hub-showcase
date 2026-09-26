@@ -477,3 +477,193 @@ select:hover {
     opacity: 0.5;
   }
 }
+
+/* ---------- Songs ---------- */
+
+a.wordmark {
+  color: var(--text);
+  text-decoration: none;
+}
+
+h3 {
+  margin: 0 0 0.75rem;
+  font-size: 0.9375rem;
+  line-height: 1.4;
+}
+
+.songs {
+  display: grid;
+  gap: 1rem;
+  justify-items: start;
+}
+
+.songs > * {
+  width: 100%;
+}
+
+.songs > .button {
+  width: auto;
+}
+
+.section-head h2 {
+  margin: 0.5rem 0 0;
+  font-size: 1.25rem;
+}
+
+.group h3 {
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 0.875rem;
+  margin-bottom: 0.5rem;
+}
+
+.song-list,
+.track-list,
+.file-slots {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.song-list,
+.track-list {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.song-list li + li,
+.track-list li + li,
+.file-slots li + li {
+  border-top: 1px solid var(--border);
+}
+
+.song-list a {
+  display: grid;
+  gap: 0.125rem;
+  min-height: 44px;
+  padding: 0.875rem 1rem;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.song-list a:hover {
+  background: var(--bg);
+}
+
+.song-title,
+.track-name {
+  font-weight: 500;
+}
+
+.ready {
+  color: var(--success);
+}
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 0.9375rem;
+}
+
+.back::before {
+  content: '<';
+  margin-right: 0.5rem;
+}
+
+.back:hover {
+  color: var(--text);
+}
+
+.badge.status-learning {
+  background: var(--pale-blue);
+  color: var(--accent);
+}
+
+.badge.status-performing {
+  background: var(--pale-green);
+  color: var(--success);
+}
+
+.badge.status-retired {
+  background: var(--skeleton);
+  color: var(--muted);
+}
+
+.player {
+  display: block;
+  width: 100%;
+  margin: 0.25rem 0 0.75rem;
+}
+
+.track {
+  padding: 0.75rem 1rem;
+}
+
+.track .player {
+  margin-top: 0.75rem;
+}
+
+.download {
+  margin-top: 0.25rem;
+}
+
+/* ---------- Song admin ---------- */
+
+.admin {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.admin > h2 {
+  margin: 0;
+}
+
+.actions,
+.slot-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.file-slot {
+  padding: 0.75rem 0;
+}
+
+.file-slot:first-child {
+  padding-top: 0;
+}
+
+.file-slot:last-child {
+  padding-bottom: 0;
+}
+
+label.button {
+  display: inline-flex;
+  cursor: pointer;
+}
+
+label.button[aria-disabled='true'] {
+  opacity: 0.6;
+  cursor: default;
+}
+
+progress {
+  width: 100%;
+  height: 6px;
+  margin-top: 0.5rem;
+  accent-color: var(--accent);
+}
+
+.danger-zone {
+  display: grid;
+  gap: 0.75rem;
+  justify-items: start;
+}

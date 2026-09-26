@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { ApiError, api, signInUrl, signOutUrl, type Member } from './api'
 import Home from './Home'
 import Members from './Members'
+import SongPage from './SongPage'
 
 type Session =
   | { kind: 'loading' }
@@ -20,6 +21,7 @@ function usePath(): [string, (to: string) => void] {
   const navigate = useCallback((to: string) => {
     window.history.pushState(null, '', to)
     setPath(to)
+    window.scrollTo(0, 0)
   }, [])
   return [path, navigate]
 }
@@ -94,7 +96,8 @@ export default function App() {
 
   const { member } = session
   const isAdmin = member.role !== 'member'
-  const view = isAdmin && path === '/members' ? 'members' : 'home'
+  const songId = path.match(/^\/songs\/([A-Za-z0-9]+)$/)?.[1]
+  const view = isAdmin && path === '/members' ? 'members' : songId ? 'song' : 'home'
 
   const link = (to: string, label: string, active: boolean) => (
     <a
@@ -112,7 +115,16 @@ export default function App() {
   return (
     <>
       <header className="topbar">
-        <span className="wordmark">Rehearsal Hub</span>
+        <a
+          className="wordmark"
+          href="/"
+          onClick={(e) => {
+            e.preventDefault()
+            navigate('/')
+          }}
+        >
+          Rehearsal Hub
+        </a>
         <nav>
           {isAdmin && link('/', 'Home', view === 'home')}
           {isAdmin && link('/members', 'Members', view === 'members')}
@@ -122,8 +134,10 @@ export default function App() {
       <main className="page">
         {view === 'members' ? (
           <Members me={member} />
+        ) : view === 'song' && songId ? (
+          <SongPage key={songId} id={songId} me={member} navigate={navigate} />
         ) : (
-          <Home member={member} onChange={(m) => setSession({ kind: 'member', member: m })} />
+          <Home member={member} navigate={navigate} onChange={(m) => setSession({ kind: 'member', member: m })} />
         )}
       </main>
     </>

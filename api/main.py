@@ -9,12 +9,14 @@ from fastapi.staticfiles import StaticFiles
 from auth import current_member, easy_auth_enabled, now, require_role
 from mailer import Mailer, get_mailer
 from models import ROLE_RANK, InviteRequest, InviteResponse, MeUpdate, Member, MemberUpdate, Role
-from store import MemberStore, get_store
+from songs import router as songs_router
+from store import DocStore, get_store
 
 # The React build is copied here at deploy time (see .github/workflows/deploy.yml).
 STATIC_DIR = (Path(__file__).parent / "static").resolve()
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+app.include_router(songs_router)
 
 
 @app.get("/api/health")
@@ -39,7 +41,7 @@ def get_me(member: Member = Depends(current_member)) -> Member:
 def update_me(
     body: MeUpdate,
     member: Member = Depends(current_member),
-    store: MemberStore = Depends(get_store),
+    store: DocStore = Depends(get_store),
 ) -> Member:
     updated = apply_update(member, body.model_dump(exclude_unset=True))
     store.upsert(updated.model_dump())
@@ -62,7 +64,7 @@ def can_manage(actor: Member, role: Role) -> bool:
 @app.get("/api/members")
 def list_members(
     _: Member = Depends(require_role("admin")),
-    store: MemberStore = Depends(get_store),
+    store: DocStore = Depends(get_store),
 ) -> list[Member]:
     members = [Member(**d) for d in store.list_all()]
     return sorted(members, key=lambda m: (m.status != "active", m.name.lower()))
@@ -72,13 +74,13 @@ def list_members(
 def invite_member(
     body: InviteRequest,
     actor: Member = Depends(require_role("admin")),
-    store: MemberStore = Depends(get_store),
+    store: DocStore = Depends(get_store),
     mailer: Mailer = Depends(get_mailer),
 ) -> InviteResponse:
     if not can_manage(actor, body.role):
         raise HTTPException(403, detail={"reason": "forbidden"})
     email = body.email.strip().lower()
-    if store.find_by_email(email):
+    if store.find("email", email):
         raise HTTPException(409, detail={"reason": "already_exists"})
     invite = Member(
         id=f"invite-{uuid.uuid4().hex}",
@@ -99,7 +101,7 @@ def update_member(
     member_id: str,
     body: MemberUpdate,
     actor: Member = Depends(require_role("admin")),
-    store: MemberStore = Depends(get_store),
+    store: DocStore = Depends(get_store),
 ) -> Member:
     doc = store.get(member_id)
     if doc is None:
@@ -121,7 +123,7 @@ def update_member(
 def delete_member(
     member_id: str,
     actor: Member = Depends(require_role("admin")),
-    store: MemberStore = Depends(get_store),
+    store: DocStore = Depends(get_store),
 ) -> None:
     doc = store.get(member_id)
     if doc is None:

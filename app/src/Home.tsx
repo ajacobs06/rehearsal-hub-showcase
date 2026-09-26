@@ -1,7 +1,16 @@
 import { useState } from 'react'
 import { PARTS, api, type Member, type Part } from './api'
+import Songs from './Songs'
 
-export default function Home({ member, onChange }: { member: Member; onChange: (m: Member) => void }) {
+export default function Home({
+  member,
+  navigate,
+  onChange,
+}: {
+  member: Member
+  navigate: (to: string) => void
+  onChange: (m: Member) => void
+}) {
   const [editing, setEditing] = useState(member.part === null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -57,10 +66,7 @@ export default function Home({ member, onChange }: { member: Member; onChange: (
         )}
       </section>
 
-      <section className="panel quiet">
-        <h2>Learning tracks and the rehearsal schedule</h2>
-        <p className="muted">These will appear here once the committee adds this term's songs.</p>
-      </section>
+      <Songs me={member} navigate={navigate} />
     </>
   )
 }
