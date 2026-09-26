@@ -84,7 +84,7 @@ def test_quartet_lifecycle(env, owner) -> None:
     assert res.json()["memberCount"] == 1
     assert env["members"].get(MEMBER_ID)["groups"] == [q["id"]]
     r = make_rehearsal(env, groups=[q["id"]])
-    listed = {g["id"]: g["memberCount"] for g in client.get("/api/groups", headers=env["member"]).json()}
+    listed = {g["id"]: g["memberCount"] for g in client.get("/api/groups", headers=env["admin"]).json()}
     assert listed[q["id"]] == 1 and {"auditioned", "open", "committee"} <= listed.keys()
 
     assert client.delete(f"/api/groups/{q['id']}", headers=env["admin"]).status_code == 204
@@ -270,3 +270,13 @@ def test_legacy_admin_without_groups_keeps_admin(env) -> None:
     env["members"].upsert(doc)
     assert client.get("/api/members", headers=env["admin"]).status_code == 200
     assert env["members"].get("google:sub-admin@example.com")["groups"] == ["committee"]
+
+
+def test_members_only_see_their_own_groups(env, owner) -> None:
+    """Members need their groups' names (account, rehearsals), not the list of every quartet."""
+    q = client.post("/api/groups", headers=env["admin"], json={"name": "Secret Quartet"}).json()
+    set_groups(env, owner, MEMBER_ID, ["open"])
+    mine = client.get("/api/groups", headers=env["member"]).json()
+    assert [(g["id"], g["name"], g["memberCount"]) for g in mine] == [("open", "Open chorus", 0)]
+    everything = {g["id"] for g in client.get("/api/groups", headers=env["admin"]).json()}
+    assert {"open", "auditioned", "committee", q["id"]} <= everything

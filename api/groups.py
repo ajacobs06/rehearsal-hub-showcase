@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from auth import current_member, require_role
 from models import Group, GroupCreate, GroupMembers, GroupUpdate, Member
-from roles import DEFAULT_GROUPS, admin_group_ids, derived_role, group_ids, stored_groups
+from roles import DEFAULT_GROUPS, admin_group_ids, derived_role, group_ids, member_groups, stored_groups
 from store import DocStore, get_group_store, get_rehearsal_store, get_store
 
 router = APIRouter(prefix="/api/groups")
@@ -55,15 +55,20 @@ def to_group(doc: dict, count: int = 0) -> Group:
 
 @router.get("")
 def list_groups(
-    _: Member = Depends(current_member),
+    me: Member = Depends(current_member),
     groups: DocStore = Depends(get_group_store),
     members: DocStore = Depends(get_store),
 ) -> list[Group]:
-    counts: dict[str, int] = {}
-    for m in members.list_all():
-        for g in m.get("groups", []):
-            counts[g] = counts.get(g, 0) + 1
+    """Admins get every group with member counts. Members only get their own groups (to name them
+    on their account and rehearsals), without counts: which quartets exist is the committee's."""
     docs = stored_groups(groups)
+    counts: dict[str, int] = {}
+    if me.role == "member":
+        docs = [d for d in docs if d["id"] in me.groups]
+    else:
+        for m in members.list_all():
+            for g in member_groups(m):
+                counts[g] = counts.get(g, 0) + 1
     # Defaults first in their usual order, then the rest by name.
     order = {g["id"]: i for i, g in enumerate(DEFAULT_GROUPS)}
     docs.sort(key=lambda d: (order.get(d["id"], len(order)), d["name"].lower()))

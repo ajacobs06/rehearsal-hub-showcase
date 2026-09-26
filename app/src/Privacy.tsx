@@ -43,12 +43,20 @@ export default function Privacy({ back }: { back: React.ReactNode }) {
           Our service providers process it for us: Microsoft Azure stores it in France Central (in the EU) and sends invite emails,
           and Google handles sign-in.
         </li>
+        <li>
+          The Azure account that runs Rehearsal Hub is currently provided through the University of Birmingham, so the
+          university's IT administrators have technical access to it.
+        </li>
       </ul>
 
       <h2>Error monitoring</h2>
       <p>
         To find and fix problems, the server records technical details of requests and errors (for example which page failed and
         when). IP addresses are masked, nothing is tracked in your browser, and these records are deleted after 30 days.
+      </p>
+      <p>
+        For security, we also log changes to stored files and settings, such as who uploaded or deleted a score and from which IP
+        address. Only committee admins upload files. These logs are deleted after 30 days.
       </p>
 
       <h2>How long we keep it</h2>
