@@ -24,12 +24,16 @@ STATIC_DIR = (Path(__file__).parent / "static").resolve()
 
 # Server-side error monitoring (Application Insights), only where it's configured: never in tests
 # or local dev. No browser tracking; App Insights masks client IPs.
+app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+
 if os.environ.get("APPLICATIONINSIGHTS_CONNECTION_STRING"):
     from azure.monitor.opentelemetry import configure_azure_monitor
+    from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
     configure_azure_monitor()
-
-app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+    # FastAPI was imported before monitoring started, so instrument this app explicitly;
+    # otherwise incoming requests aren't recorded.
+    FastAPIInstrumentor.instrument_app(app)
 app.include_router(songs_router)
 app.include_router(tracker_router)
 app.include_router(rehearsals_router)
