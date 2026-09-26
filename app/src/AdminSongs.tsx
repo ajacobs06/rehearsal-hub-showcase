@@ -1,4 +1,4 @@
-import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react'
+import { useCallback, useEffect, useState, type ChangeEvent, type FormEvent } from 'react'
 import {
   ApiError,
   FILE_LABEL,
@@ -20,7 +20,8 @@ import { useSongFilter } from './SongFilter'
 
 type Navigate = (to: string) => void
 
-const ALL_FILES: FileKind[] = ['tenor', 'lead', 'bari', 'bass', 'full', 'score']
+const AUDIO_FILES: FileKind[] = ['tenor', 'lead', 'bari', 'bass', 'full']
+const ALL_FILES: FileKind[] = ['score', ...AUDIO_FILES]
 const GROUPS: SongStatus[] = ['learning', 'performing', 'retired']
 
 /** Admin: every song (retired too), how complete its files are, and "Add a song". */
@@ -28,12 +29,13 @@ export function AdminSongList({ navigate }: { navigate: Navigate }) {
   const [songs, setSongs] = useState<Song[] | null>(null)
   const [error, setError] = useState(false)
 
-  useEffect(() => {
+  const load = useCallback(() => {
     songsApi
       .list('all')
       .then(setSongs)
       .catch(() => setError(true))
   }, [])
+  useEffect(load, [load])
 
   const [shown, filters] = useSongFilter(songs)
 
@@ -41,7 +43,10 @@ export function AdminSongList({ navigate }: { navigate: Navigate }) {
 
   return (
     <>
-      <AddSong onCreated={(s) => navigate(`/admin/songs/${s.id}`)} />
+      <div className="actions">
+        <AddSong onCreated={(s) => navigate(`/admin/songs/${s.id}`)} />
+      </div>
+      <BulkScoreUpload songs={songs ?? []} onDone={load} />
       {filters}
       {songs === null ? (
         <div className="panel">
@@ -63,18 +68,14 @@ export function AdminSongList({ navigate }: { navigate: Navigate }) {
               </h3>
               <ul className="song-list">
                 {items.map((s) => {
-                  const have = ALL_FILES.filter((k) => s.files[k]).length
+                  const tracks = AUDIO_FILES.filter((k) => s.files[k]).length
                   return (
                     <li key={s.id}>
                       <a {...internalLink(`/admin/songs/${s.id}`, navigate)}>
                         <span className="song-title">{s.title}</span>
                         {songTagLine(s) && <span className="muted small">{songTagLine(s)}</span>}
-                        <span className={`small ${have === ALL_FILES.length ? 'ready' : 'muted'}`}>
-                          {have} of {ALL_FILES.length} files
-                          {have < ALL_FILES.length &&
-                            `. Missing: ${ALL_FILES.filter((k) => !s.files[k])
-                              .map((k) => FILE_LABEL[k])
-                              .join(', ')}`}
+                        <span className={`small ${s.files.score ? 'ready' : 'muted'}`}>
+                          {s.files.score ? 'Score uploaded' : 'No score'}, {tracks} of {AUDIO_FILES.length} tracks
                         </span>
                       </a>
                     </li>
@@ -505,5 +506,204 @@ function TagEditor({ tags, onChange, suggestions }: { tags: string[]; onChange: 
       )}
       {error && <p className="error small">{error}</p>}
     </div>
+  )
+}
+
+// ---------- Bulk score upload ----------
+
+const MAX_PDF_BYTES = 25 * 1024 * 1024
+
+type Row = {
+  key: string
+  file: File
+  title: string
+  include: boolean
+  status: 'waiting' | 'uploading' | 'done' | 'error'
+  progress: number
+  message?: string
+}
+
+/** "Lida_Rose - SATB.pdf" -> "Lida Rose - SATB" */
+function titleFromFile(name: string): string {
+  return name.replace(/\.pdf$/i, '').replace(/_+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120)
+}
+
+const keyOf = (title: string) => title.trim().toLowerCase()
+
+function problemWith(row: Row): string | null {
+  if (!/\.pdf$/i.test(row.file.name) && row.file.type !== 'application/pdf') return 'Not a PDF'
+  if (row.file.size > MAX_PDF_BYTES) return 'Over 25 MB'
+  if (!row.title.trim()) return 'Needs a title'
+  return null
+}
+
+/**
+ * Upload many score PDFs at once (e.g. a folder downloaded from Google Drive). Each file becomes a
+ * new song titled from its filename, or replaces the score of an existing song with that title.
+ * Files go one at a time through the same checks as a single upload.
+ */
+function BulkScoreUpload({ songs, onDone }: { songs: Song[]; onDone: () => void }) {
+  const [open, setOpen] = useState(false)
+  const [rows, setRows] = useState<Row[]>([])
+  const [running, setRunning] = useState(false)
+  const existing = new Map(songs.map((s) => [keyOf(s.title), s]))
+
+  const update = (key: string, patch: Partial<Row>) => setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)))
+
+  function pick(e: ChangeEvent<HTMLInputElement>) {
+    const files = [...(e.target.files ?? [])]
+    e.target.value = ''
+    const seen = new Set<string>()
+    setRows(
+      files.map((file, i) => {
+        const title = titleFromFile(file.name)
+        const row: Row = { key: `${i}-${file.name}`, file, title, include: true, status: 'waiting', progress: 0 }
+        // Untick problems and repeated titles, so one file doesn't overwrite another.
+        row.include = !problemWith(row) && !seen.has(keyOf(title))
+        seen.add(keyOf(title))
+        return row
+      }),
+    )
+  }
+
+  const included = rows.filter((r) => r.include && !problemWith(r))
+  // Titles shared by more than one usable file (shown on each), and whether two ticked ones clash.
+  const usable = rows.filter((r) => !problemWith(r)).map((r) => keyOf(r.title))
+  const shared = new Set(usable.filter((k, i) => usable.indexOf(k) !== i))
+  const ticked = included.map((r) => keyOf(r.title))
+  const clash = ticked.some((k, i) => ticked.indexOf(k) !== i)
+
+  async function run() {
+    setRunning(true)
+    const created = new Map<string, string>() // title -> id, for songs made during this run
+    for (const row of included) {
+      update(row.key, { status: 'uploading', progress: 0, message: undefined })
+      const k = keyOf(row.title)
+      let newId: string | null = null
+      try {
+        let id = existing.get(k)?.id ?? created.get(k)
+        if (!id) {
+          id = newId = (await songsApi.create({ title: row.title.trim() })).id
+          created.set(k, id)
+        }
+        await songsApi.uploadFile(id, 'score', row.file, (f) => update(row.key, { progress: f }))
+        update(row.key, { status: 'done', progress: 1 })
+      } catch (err) {
+        // Don't leave behind a new song with no score.
+        if (newId) {
+          created.delete(k)
+          await songsApi.remove(newId).catch(() => undefined)
+        }
+        const reason = err instanceof ApiError ? err.reason : undefined
+        update(row.key, { status: 'error', message: UPLOAD_ERROR[reason ?? ''] ?? "Couldn't upload this file." })
+      }
+    }
+    setRunning(false)
+    onDone()
+  }
+
+  if (!open)
+    return (
+      <div>
+        <button className="button secondary" onClick={() => setOpen(true)}>
+          Upload scores
+        </button>
+      </div>
+    )
+
+  const done = rows.filter((r) => r.status === 'done').length
+  const failed = rows.filter((r) => r.status === 'error').length
+  const finished = !running && done + failed > 0
+
+  return (
+    <section className="panel bulk-upload">
+      <h3>Upload scores</h3>
+      <p className="muted small">
+        Pick several PDFs, for example a folder downloaded from Google Drive. Each becomes a song named after its file, or
+        replaces the score of a song with the same title.
+      </p>
+      <div>
+        <input id="bulk-pdfs" className="visually-hidden" type="file" multiple accept="application/pdf,.pdf" onChange={pick} disabled={running} />
+        <label htmlFor="bulk-pdfs" className="button secondary" aria-disabled={running}>
+          {rows.length ? 'Choose different PDFs' : 'Choose PDFs'}
+        </label>
+      </div>
+
+      {rows.length > 0 && (
+        <ul className="bulk-rows">
+          {rows.map((r) => {
+            const problem = problemWith(r)
+            const match = existing.get(keyOf(r.title))
+            const note =
+              r.status === 'done'
+                ? 'Uploaded'
+                : r.status === 'error'
+                  ? r.message
+                  : problem ??
+                    (shared.has(keyOf(r.title))
+                      ? 'Same title as another file'
+                      : match
+                        ? `Replaces the score of "${match.title}"`
+                        : 'New song')
+            return (
+              <li key={r.key} className={`bulk-row status-${r.status}`}>
+                <label className="check">
+                  <input
+                    type="checkbox"
+                    checked={r.include && !problem}
+                    disabled={Boolean(problem) || running || r.status === 'done'}
+                    onChange={(e) => update(r.key, { include: e.target.checked })}
+                  />
+                  <span className="visually-hidden">Include {r.file.name}</span>
+                </label>
+                <div className="bulk-main">
+                  <label>
+                    <span className="visually-hidden">Song title for {r.file.name}</span>
+                    <input
+                      value={r.title}
+                      maxLength={120}
+                      disabled={running || r.status === 'done'}
+                      onChange={(e) => update(r.key, { title: e.target.value })}
+                    />
+                  </label>
+                  <p className={`small ${r.status === 'error' || problem ? 'error' : r.status === 'done' ? 'ready' : 'muted'}`}>
+                    {note} <span className="muted">({r.file.name})</span>
+                  </p>
+                  {r.status === 'uploading' && (
+                    <progress value={r.progress} max={1} aria-label={`Uploading ${r.file.name}`} />
+                  )}
+                </div>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+
+      <div className="actions">
+        {rows.length > 0 && !finished && (
+          <button className="button" onClick={run} disabled={running || included.length === 0 || clash}>
+            {running ? 'Uploading' : `Upload ${included.length} ${included.length === 1 ? 'score' : 'scores'}`}
+          </button>
+        )}
+        <button
+          className="button secondary"
+          disabled={running}
+          onClick={() => {
+            setRows([])
+            setOpen(false)
+          }}
+        >
+          {finished ? 'Done' : 'Cancel'}
+        </button>
+      </div>
+      {clash && !running && (
+        <p className="error small">Two ticked files have the same title. Rename or untick one.</p>
+      )}
+      {finished && (
+        <p className={failed ? 'error' : 'success'} role="status">
+          {done} uploaded{failed ? `, ${failed} failed. Fix those and try again.` : '.'}
+        </p>
+      )}
+    </section>
   )
 }

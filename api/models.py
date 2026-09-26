@@ -329,6 +329,7 @@ class RehearsalSong(BaseModel):
     myPart: Part | None
     myState: LearnState
     hasMyTrack: bool
+    hasScore: bool
 
 
 class RsvpCounts(BaseModel):

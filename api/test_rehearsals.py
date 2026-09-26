@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 from main import app
 from test_main import OWNER_EMAIL, add_member
-from test_songs import MP3, env, make_song, upload  # noqa: F401  (env is a fixture)
+from test_songs import MP3, PDF, env, make_song, upload  # noqa: F401  (env is a fixture)
 
 client = TestClient(app)
 MEMBER_ID = "google:sub-m@example.com"
@@ -204,3 +204,11 @@ def test_delete_rehearsal(env) -> None:
     r = make_rehearsal(env)
     assert client.delete(f"/api/rehearsals/{r['id']}", headers=env["admin"]).status_code == 204
     assert client.get(f"/api/rehearsals/{r['id']}", headers=env["member"]).status_code == 404
+
+
+def test_rehearsal_songs_report_score(env) -> None:
+    with_score, without = make_song(env, title="Lida Rose"), make_song(env, title="Hunchback Medley")
+    upload(env, with_score["id"], "score", PDF)
+    r = make_rehearsal(env, songIds=[with_score["id"], without["id"]])
+    songs = {s["title"]: s["hasScore"] for s in client.get(f"/api/rehearsals/{r['id']}", headers=env["member"]).json()["songs"]}
+    assert songs == {"Lida Rose": True, "Hunchback Medley": False}

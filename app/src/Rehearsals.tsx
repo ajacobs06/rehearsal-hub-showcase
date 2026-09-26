@@ -1,10 +1,10 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import {
   ApiError,
-  FILE_LABEL,
   RSVP_OPTIONS,
   STATE_LABEL,
   formatWhen,
+  readiness,
   rehearsalsApi,
   songsApi,
   type Rehearsal,
@@ -86,11 +86,10 @@ export function SongsToPrepare({ r, navigate }: { r: Rehearsal; navigate: Naviga
                 <span className={`badge state-${s.myState}`}>{STATE_LABEL[s.myState]}</span>
               )}
             </span>
-            {s.myPart && (
-              <span className={`small ${s.hasMyTrack ? 'ready' : 'muted'}`}>
-                {s.hasMyTrack ? `${FILE_LABEL[s.myPart]} track ready` : `No ${FILE_LABEL[s.myPart]} track yet`}
-              </span>
-            )}
+            {(() => {
+              const r = readiness(s.hasScore, s.myPart, s.hasMyTrack)
+              return <span className={`small ${r.ready ? 'ready' : 'muted'}`}>{r.text}</span>
+            })()}
           </a>
         </li>
       ))}

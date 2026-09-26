@@ -198,6 +198,7 @@ export const UPLOAD_ERROR: Record<string, string> = {
   too_large: 'That file is too big. Tracks can be up to 50 MB and scores up to 25 MB.',
   empty: 'That file is empty.',
   upload_missing: "The upload didn't reach storage. Try again.",
+  upload_failed: 'The upload was interrupted. Check your connection and try again.',
 }
 
 export const songsApi = {
@@ -261,6 +262,7 @@ export interface Rehearsal {
     myPart: Part | null
     myState: LearnState
     hasMyTrack: boolean
+    hasScore: boolean
   }[]
   myRsvp: RsvpResponse | null
   rsvpOpen: boolean
@@ -338,6 +340,15 @@ export const accountApi = {
 }
 
 export const PRIVACY_CONTACT = 'barbershopsingingsociety@gmail.com'
+
+/** Scores come first (the society rarely uses tracks); mention the member's track when there is one. */
+export function readiness(hasScore: boolean, part: Part | null, hasTrack: boolean): { text: string; ready: boolean } {
+  const label = part ? FILE_LABEL[part] : ''
+  if (hasScore && hasTrack) return { text: `Score and ${label} track ready`, ready: true }
+  if (hasScore) return { text: 'Score ready', ready: true }
+  if (hasTrack) return { text: `${label} track ready`, ready: true }
+  return { text: 'No score yet', ready: false }
+}
 
 export const signInUrl = '/.auth/login/google?post_login_redirect_uri=/'
 export const signOutUrl = '/.auth/logout?post_logout_redirect_uri=/'

@@ -88,7 +88,20 @@ export default function SongPage({ id, me, navigate }: { id: string; me: Member;
         <span className={`badge status-${song.status}`}>{STATUS_LABEL[song.status]}</span>
       </div>
 
-      <PartPanel song={song} usual={me.part} onChange={setSong} />
+      {song.files.score && (
+        <section className="panel score-panel">
+          <div>
+            <h2>Score</h2>
+            <p className="muted small">PDF, opens in a new tab</p>
+          </div>
+          <div className="actions">
+            <OpenScoreButton songId={song.id} />
+            <DownloadButton songId={song.id} kind="score" />
+          </div>
+        </section>
+      )}
+
+      <PartPanel song={song} usual={me.part} hasTracks={AUDIO.some((k) => song.files[k])} onChange={setSong} />
       <ProgressPanel song={song} onChange={setSong} />
 
       {others.length > 0 && (
@@ -102,18 +115,8 @@ export default function SongPage({ id, me, navigate }: { id: string; me: Member;
         </section>
       )}
 
-      {song.files.score && (
-        <section className="panel row">
-          <div>
-            <h2>Score</h2>
-            <p className="muted small">PDF, opens in a new tab</p>
-          </div>
-          <OpenScoreButton songId={song.id} />
-        </section>
-      )}
-
       {!mine && others.length === 0 && !song.files.score && (
-        <p className="muted">No tracks or score yet. Check back after the committee uploads them.</p>
+        <p className="muted">No score yet. Check back after the committee uploads it.</p>
       )}
 
     </>
@@ -121,7 +124,17 @@ export default function SongPage({ id, me, navigate }: { id: string; me: Member;
 }
 
 /** The part this member is learning for this song, with the option to learn a different one. */
-function PartPanel({ song, usual, onChange }: { song: Song; usual: Part | null; onChange: (s: Song) => void }) {
+function PartPanel({
+  song,
+  usual,
+  hasTracks,
+  onChange,
+}: {
+  song: Song
+  usual: Part | null
+  hasTracks: boolean
+  onChange: (s: Song) => void
+}) {
   const part = song.myPart
   const [picking, setPicking] = useState(part === null)
   const [busy, setBusy] = useState(false)
@@ -190,7 +203,8 @@ function PartPanel({ song, usual, onChange }: { song: Song; usual: Part | null; 
           <DownloadButton songId={song.id} kind={track} />
         </>
       ) : (
-        part && <p className="muted">No {FILE_LABEL[part]} track yet.</p>
+        // Most songs have only a score, so only mention a missing track when others exist.
+        part && hasTracks && <p className="muted">No {FILE_LABEL[part]} track yet.</p>
       )}
       {error && <p className="error small">Couldn't change your part. Try again.</p>}
     </section>

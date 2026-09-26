@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { FILE_LABEL, STATE_LABEL, STATUS_LABEL, songTagLine, songsApi, type Song, type SongStatus } from './api'
+import { STATE_LABEL, STATUS_LABEL, readiness, songTagLine, songsApi, type Song, type SongStatus } from './api'
 import { useSongFilter } from './SongFilter'
 
 const GROUPS: SongStatus[] = ['learning', 'performing']
@@ -64,14 +64,16 @@ export default function Songs({ navigate }: { navigate: (to: string) => void }) 
                       </span>
                       {s.arranger && <span className="muted small">{s.arranger}</span>}
                       {songTagLine(s) && <span className="muted small">{songTagLine(s)}</span>}
-                      {s.myPart && (
-                        <span className={`small ${s.files[s.myPart] ? 'ready' : 'muted'}`}>
-                          {s.files[s.myPart]
-                            ? `${FILE_LABEL[s.myPart]} track ready`
-                            : `No ${FILE_LABEL[s.myPart]} track yet`}
-                          {s.partOverride && ' (this song)'}
-                        </span>
-                      )}
+                      {(() => {
+                        const hasTrack = Boolean(s.myPart && s.files[s.myPart])
+                        const r = readiness(Boolean(s.files.score), s.myPart, hasTrack)
+                        return (
+                          <span className={`small ${r.ready ? 'ready' : 'muted'}`}>
+                            {r.text}
+                            {hasTrack && s.partOverride && ' (this song)'}
+                          </span>
+                        )
+                      })()}
                     </a>
                   </li>
                 ))}

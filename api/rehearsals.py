@@ -69,6 +69,7 @@ def build_view(
             myPart=(part := (mine.get(s.id, {}).get("part") or me.part)),
             myState=mine.get(s.id, {}).get("state") or "not_started",
             hasMyTrack=bool(part and part in s.files),
+            hasScore="score" in s.files,
         )
         for s in plan
     ]
