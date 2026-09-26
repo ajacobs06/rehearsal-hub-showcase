@@ -6,9 +6,6 @@
 @description('The Azure for Students subscription only allows a few EU regions; France Central is the closest.')
 param location string = 'francecentral'
 
-@description('Email that becomes owner on first sign-in when no member record exists for it.')
-param bootstrapOwnerEmail string
-
 @description('Object ID of the developer, granted access to the dev database and Key Vault secrets.')
 param developerPrincipalId string
 
@@ -65,7 +62,6 @@ resource appSettings 'Microsoft.Web/sites/config@2023-12-01' = {
   properties: {
     SCM_DO_BUILD_DURING_DEPLOYMENT: 'true'
     APP_URL: 'https://${site.properties.defaultHostName}'
-    BOOTSTRAP_OWNER_EMAIL: bootstrapOwnerEmail
     COSMOS_ENDPOINT: cosmos.properties.documentEndpoint
     COSMOS_DATABASE: prodDb.name
     EMAIL_SENDER: 'DoNotReply@${emailDomain.properties.mailFromSenderDomain}'
@@ -113,8 +109,9 @@ resource auth 'Microsoft.Web/sites/config@2023-12-01' = if (!empty(googleClientI
       }
     }
     login: {
+      // The app never uses provider tokens; keeping them would expose them via /.auth/me.
       tokenStore: {
-        enabled: true
+        enabled: false
       }
     }
   }

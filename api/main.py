@@ -1,3 +1,4 @@
+import logging
 import os
 import uuid
 from datetime import datetime, timezone
@@ -8,7 +9,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from account import router as account_router
-from auth import current_member, easy_auth_enabled, now, require_role
+from auth import current_member, dev_auth_enabled, easy_auth_enabled, now, require_role
 from feedback import router as feedback_router
 from mailer import Mailer, get_mailer
 from models import ROLE_RANK, InviteRequest, InviteResponse, MeUpdate, Member, MemberUpdate, Role
@@ -35,6 +36,12 @@ if os.environ.get("APPLICATIONINSIGHTS_CONNECTION_STRING"):
     # FastAPI was imported before monitoring started, so instrument this app explicitly;
     # otherwise incoming requests aren't recorded.
     FastAPIInstrumentor.instrument_app(app)
+if dev_auth_enabled():
+    logging.getLogger(__name__).warning(
+        "DEV AUTH ON: every request is signed in as %s. Never set ALLOW_DEV_AUTH outside local dev.",
+        os.environ["DEV_USER_EMAIL"],
+    )
+
 # Body cap, early 401 for anonymous writes and rate limits, before FastAPI reads anything.
 app.add_middleware(SecurityMiddleware)
 app.include_router(songs_router)
