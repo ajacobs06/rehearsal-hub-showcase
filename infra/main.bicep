@@ -9,8 +9,8 @@ param location string = 'francecentral'
 @description('Object ID of the developer, granted access to the dev database and Key Vault secrets.')
 param developerPrincipalId string
 
-@description('GitHub repository allowed to deploy, as owner/name.')
-param githubRepo string = 'ajacobs06/rehearsal-hub'
+@description('GitHub repository allowed to deploy, as its OIDC subject prefix. GitHub uses immutable IDs (owner@id/repo@id), so a renamed or re-created repo with the same name cannot match. See `gh api repos/{owner}/{repo}/actions/oidc/customization/sub`.')
+param githubSubjectPrefix string = 'repo:ajacobs06@222806665/rehearsal-hub@1388325836'
 
 @description('Google OAuth client ID. Leave empty to deploy without sign-in enabled.')
 param googleClientId string = ''
@@ -109,7 +109,7 @@ resource deployFederation 'Microsoft.ManagedIdentity/userAssignedIdentities/fede
   name: 'github-production'
   properties: {
     issuer: 'https://token.actions.githubusercontent.com'
-    subject: 'repo:${githubRepo}:environment:production'
+    subject: '${githubSubjectPrefix}:environment:production'
     audiences: ['api://AzureADTokenExchange']
   }
 }
