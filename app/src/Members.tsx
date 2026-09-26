@@ -2,10 +2,10 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { ApiError, COMMITTEE, PARTS, api, canManage, groupsApi, type Group, type Member, type Part } from './api'
 import { GroupCheckboxes, groupNames, refreshGroups, useGroups } from './groups'
 
-export default function Members({ me }: { me: Member }) {
+export default function Members({ me, view }: { me: Member; view: 'people' | 'groups' }) {
   const [members, setMembers] = useState<Member[] | null>(null)
   const [loadError, setLoadError] = useState(false)
-  const [tab, setTab] = useState<'people' | 'groups'>('people')
+  const tab = view
   const groups = useGroups()
 
   const load = useCallback(() => {
@@ -41,16 +41,6 @@ export default function Members({ me }: { me: Member }) {
 
   return (
     <>
-      <h1>Members</h1>
-      <div className="segmented tabs" role="group" aria-label="Members view">
-        <button className={tab === 'people' ? 'selected' : undefined} aria-pressed={tab === 'people'} onClick={() => setTab('people')}>
-          People
-        </button>
-        <button className={tab === 'groups' ? 'selected' : undefined} aria-pressed={tab === 'groups'} onClick={() => setTab('groups')}>
-          Groups
-        </button>
-      </div>
-
       {members === null ? (
         <div className="panel">
           <div className="skeleton skeleton-line" />

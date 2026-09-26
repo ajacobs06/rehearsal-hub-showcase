@@ -1,13 +1,11 @@
 import { useEffect, useState } from 'react'
-import { formatWhen, rehearsalsApi, type Member, type Rehearsal } from './api'
-import { RehearsalCard, RehearsalForm, countsLine, internalLink } from './Rehearsals'
+import { formatWhen, rehearsalsApi, type Rehearsal } from './api'
+import { RehearsalCard, countsLine, internalLink } from './Rehearsals'
 
-export default function Schedule({ me, navigate }: { me: Member; navigate: (to: string) => void }) {
+export default function Schedule({ navigate }: { navigate: (to: string) => void }) {
   const [upcoming, setUpcoming] = useState<Rehearsal[] | null>(null)
   const [past, setPast] = useState<Rehearsal[] | null>(null)
-  const [adding, setAdding] = useState(false)
   const [error, setError] = useState(false)
-  const isAdmin = me.role !== 'member'
 
   useEffect(() => {
     rehearsalsApi
@@ -28,24 +26,6 @@ export default function Schedule({ me, navigate }: { me: Member; navigate: (to: 
     <>
       <h1>Schedule</h1>
 
-      {isAdmin &&
-        (adding ? (
-          <>
-            <h2>Add a rehearsal</h2>
-            <RehearsalForm
-              me={me}
-              submitLabel="Add rehearsal"
-              onCancel={() => setAdding(false)}
-              onSubmit={async (body) => navigate(`/rehearsals/${(await rehearsalsApi.create(body)).id}`)}
-            />
-          </>
-        ) : (
-          <div>
-            <button className="button secondary" onClick={() => setAdding(true)}>
-              Add a rehearsal
-            </button>
-          </div>
-        ))}
 
       <section className="stack">
         <h2>Coming up</h2>
@@ -56,7 +36,7 @@ export default function Schedule({ me, navigate }: { me: Member; navigate: (to: 
           </div>
         ) : upcoming.length === 0 ? (
           <p className="muted">
-            {isAdmin ? 'Nothing scheduled. Add the next rehearsal above.' : 'Nothing scheduled yet. Check back soon.'}
+            Nothing scheduled yet. Check back soon.
           </p>
         ) : (
           upcoming.map((r) => <RehearsalCard key={r.id} r={r} navigate={navigate} onChange={replace} />)

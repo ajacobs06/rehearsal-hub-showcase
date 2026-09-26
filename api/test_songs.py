@@ -71,7 +71,9 @@ def test_member_sees_active_songs_but_not_retired(env) -> None:
     titles = [s["title"] for s in client.get("/api/songs", headers=env["member"]).json()]
     assert titles == ["Lida Rose"]
     assert client.get(f"/api/songs/{retired['id']}", headers=env["member"]).status_code == 404
-    assert len(client.get("/api/songs", headers=env["admin"]).json()) == 2
+    assert len(client.get("/api/songs", headers=env["admin"]).json()) == 1  # same view as members
+    assert len(client.get("/api/songs?scope=all", headers=env["admin"]).json()) == 2
+    assert client.get("/api/songs?scope=all", headers=env["member"]).status_code == 403
 
 
 def test_member_gets_read_link_for_uploaded_file_only(env) -> None:

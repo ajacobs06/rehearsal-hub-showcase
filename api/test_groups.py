@@ -155,3 +155,18 @@ def test_songs_stay_visible_to_everyone(env) -> None:
     make_song(env, title="Lida Rose")
     set_groups(env, env["admin"], MEMBER_ID, ["open"])
     assert [s["title"] for s in client.get("/api/songs", headers=env["member"]).json()] == ["Lida Rose"]
+
+
+def test_admin_default_list_is_their_own_view(env) -> None:
+    other = make_rehearsal(env, groups=["auditioned"])
+    everyone = make_rehearsal(env)
+    mine = [r["id"] for r in client.get("/api/rehearsals", headers=env["admin"]).json()]
+    assert mine == [everyone["id"]]
+    every = {r["id"] for r in client.get("/api/rehearsals?scope=all", headers=env["admin"]).json()}
+    assert every == {other["id"], everyone["id"]}
+    # Admins can still open any rehearsal to manage it.
+    assert client.get(f"/api/rehearsals/{other['id']}", headers=env["admin"]).status_code == 200
+
+
+def test_members_cannot_list_all_rehearsals(env) -> None:
+    assert client.get("/api/rehearsals?scope=all", headers=env["member"]).status_code == 403

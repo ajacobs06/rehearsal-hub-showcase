@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ApiError, api, signInUrl, signOutUrl, type Member } from './api'
 import Home from './Home'
-import Members from './Members'
+import Admin from './Admin'
 import RehearsalPage from './RehearsalPage'
 import Schedule from './Schedule'
 import SongPage from './SongPage'
-import Tracker from './Tracker'
 
 type Session =
   | { kind: 'loading' }
@@ -101,18 +100,17 @@ export default function App() {
   const isAdmin = member.role !== 'member'
   const songId = path.match(/^\/songs\/([A-Za-z0-9]+)$/)?.[1]
   const rehearsalId = path.match(/^\/rehearsals\/([A-Za-z0-9]+)$/)?.[1]
-  const view =
-    isAdmin && path === '/members'
-      ? 'members'
-      : isAdmin && path === '/tracker'
-        ? 'tracker'
-        : path === '/schedule'
-          ? 'schedule'
-          : rehearsalId
-            ? 'rehearsal'
-            : songId
-              ? 'song'
-              : 'home'
+  // Old bookmarks from before the admin page existed.
+  const adminPath = path === '/members' ? '/admin/members' : path === '/tracker' ? '/admin/tracker' : path
+  const view = isAdmin && adminPath.startsWith('/admin')
+    ? 'admin'
+    : path === '/schedule'
+      ? 'schedule'
+      : rehearsalId
+        ? 'rehearsal'
+        : songId
+          ? 'song'
+          : 'home'
 
   const link = (to: string, label: string, active: boolean) => (
     <a
@@ -144,20 +142,17 @@ export default function App() {
         <nav className="primary" aria-label="Main">
           {link('/', 'Home', view === 'home')}
           {link('/schedule', 'Schedule', view === 'schedule' || view === 'rehearsal')}
-          {isAdmin && link('/tracker', 'Tracker', view === 'tracker')}
-          {isAdmin && link('/members', 'Members', view === 'members')}
+          {isAdmin && link('/admin', 'Admin', view === 'admin')}
         </nav>
         <a className="signout" href={signOutUrl}>
           Sign out
         </a>
       </header>
       <main className="page">
-        {view === 'members' ? (
-          <Members me={member} />
-        ) : view === 'tracker' ? (
-          <Tracker />
+        {view === 'admin' ? (
+          <Admin path={adminPath} me={member} navigate={navigate} />
         ) : view === 'schedule' ? (
-          <Schedule me={member} navigate={navigate} />
+          <Schedule navigate={navigate} />
         ) : view === 'rehearsal' && rehearsalId ? (
           <RehearsalPage key={rehearsalId} id={rehearsalId} me={member} navigate={navigate} />
         ) : view === 'song' && songId ? (

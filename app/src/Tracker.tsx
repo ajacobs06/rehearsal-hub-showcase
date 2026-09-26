@@ -23,7 +23,6 @@ export default function Tracker() {
 
   return (
     <>
-      <h1>Tracker</h1>
       <p className="muted">
         Who has learned each current song, grouped by the part they sing on it. Learned includes ready.
       </p>

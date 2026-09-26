@@ -1,5 +1,6 @@
 import re
 import uuid
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -102,12 +103,16 @@ def save(store: DocStore, song: Song, changes: dict) -> Song:
 
 @router.get("")
 def list_songs(
+    scope: Literal["mine", "all"] = "mine",
     member: Member = Depends(current_member),
     store: DocStore = Depends(get_song_store),
     progress: DocStore = Depends(get_progress_store),
 ) -> list[SongView]:
+    """`mine` (everyone, including admins): current songs. `all` (admins): retired too."""
+    if scope == "all" and not is_admin(member):
+        raise HTTPException(403, detail={"reason": "forbidden"})
     songs = [Song(**d) for d in store.list_all()]
-    if not is_admin(member):
+    if scope == "mine":
         songs = [s for s in songs if s.status != "retired"]
     mine = {d["songId"]: d for d in progress.find("memberId", member.id)}
     views = [view_from(s, member, mine.get(s.id)) for s in songs]

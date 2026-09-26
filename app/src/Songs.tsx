@@ -1,12 +1,11 @@
-import { useEffect, useState, type FormEvent } from 'react'
-import { FILE_LABEL, STATE_LABEL, STATUS_LABEL, songsApi, type Member, type Song, type SongStatus } from './api'
+import { useEffect, useState } from 'react'
+import { FILE_LABEL, STATE_LABEL, STATUS_LABEL, songsApi, type Song, type SongStatus } from './api'
 
-const GROUPS: SongStatus[] = ['learning', 'performing', 'retired']
+const GROUPS: SongStatus[] = ['learning', 'performing']
 
-export default function Songs({ me, navigate }: { me: Member; navigate: (to: string) => void }) {
+export default function Songs({ navigate }: { navigate: (to: string) => void }) {
   const [songs, setSongs] = useState<Song[] | null>(null)
   const [loadError, setLoadError] = useState(false)
-  const isAdmin = me.role !== 'member'
 
   useEffect(() => {
     songsApi
@@ -23,7 +22,6 @@ export default function Songs({ me, navigate }: { me: Member; navigate: (to: str
         <h2>Songs</h2>
       </div>
 
-      {isAdmin && <AddSong onCreated={(s) => navigate(`/songs/${s.id}`)} />}
 
       {songs === null ? (
         <div className="panel">
@@ -32,7 +30,7 @@ export default function Songs({ me, navigate }: { me: Member; navigate: (to: str
         </div>
       ) : songs.length === 0 ? (
         <p className="muted">
-          {isAdmin ? 'No songs yet. Add the first one above.' : "No songs yet. They'll appear here once the committee adds them."}
+          {"No songs yet. They'll appear here once the committee adds them."}
         </p>
       ) : (
         GROUPS.map((status) => {
@@ -77,62 +75,5 @@ export default function Songs({ me, navigate }: { me: Member; navigate: (to: str
         })
       )}
     </section>
-  )
-}
-
-function AddSong({ onCreated }: { onCreated: (s: Song) => void }) {
-  const [open, setOpen] = useState(false)
-  const [title, setTitle] = useState('')
-  const [arranger, setArranger] = useState('')
-  const [key, setKey] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  async function submit(e: FormEvent) {
-    e.preventDefault()
-    setBusy(true)
-    setError(null)
-    try {
-      onCreated(await songsApi.create({ title, arranger: arranger || null, key: key || null }))
-    } catch {
-      setError("Couldn't add the song. Check the title and try again.")
-      setBusy(false)
-    }
-  }
-
-  if (!open)
-    return (
-      <button className="button secondary" onClick={() => setOpen(true)}>
-        Add a song
-      </button>
-    )
-
-  return (
-    <form className="panel" onSubmit={submit}>
-      <h2>Add a song</h2>
-      <div className="fields">
-        <label>
-          Title
-          <input value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={120} autoFocus />
-        </label>
-        <label>
-          Arranger
-          <input value={arranger} onChange={(e) => setArranger(e.target.value)} maxLength={120} />
-        </label>
-        <label>
-          Key
-          <input value={key} onChange={(e) => setKey(e.target.value)} maxLength={20} placeholder="e.g. Bb" />
-        </label>
-      </div>
-      <div className="actions">
-        <button className="button" type="submit" disabled={busy}>
-          {busy ? 'Adding' : 'Add song'}
-        </button>
-        <button className="button secondary" type="button" onClick={() => setOpen(false)}>
-          Cancel
-        </button>
-      </div>
-      {error && <p className="error">{error}</p>}
-    </form>
   )
 }

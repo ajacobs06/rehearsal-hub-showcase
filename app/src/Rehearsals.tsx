@@ -183,7 +183,7 @@ export function RehearsalForm({
 
   useEffect(() => {
     songsApi
-      .list()
+      .list('all')
       .then((all) => setSongs(all.filter((s) => s.status !== 'retired' || songIds.includes(s.id))))
       .catch(() => setSongs([]))
     // Only on mount: the song list doesn't need to follow ticks.

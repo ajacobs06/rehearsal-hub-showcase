@@ -70,7 +70,7 @@ export default function Home({
         )}
       </section>
 
-      <Songs me={member} navigate={navigate} />
+      <Songs navigate={navigate} />
     </>
   )
 }

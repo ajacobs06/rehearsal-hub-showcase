@@ -167,7 +167,7 @@ export const UPLOAD_ERROR: Record<string, string> = {
 }
 
 export const songsApi = {
-  list: () => request<Song[]>('/api/songs'),
+  list: (scope: 'mine' | 'all' = 'mine') => request<Song[]>(`/api/songs?scope=${scope}`),
   get: (id: string) => request<Song>(`/api/songs/${encodeURIComponent(id)}`),
   create: (body: SongInput) => request<Song>('/api/songs', { method: 'POST', body }),
   update: (id: string, body: SongInput) =>
@@ -245,7 +245,8 @@ export interface RehearsalInput {
 }
 
 export const rehearsalsApi = {
-  list: (when: 'upcoming' | 'past' = 'upcoming') => request<Rehearsal[]>(`/api/rehearsals?when=${when}`),
+  list: (when: 'upcoming' | 'past' = 'upcoming', scope: 'mine' | 'all' = 'mine') =>
+    request<Rehearsal[]>(`/api/rehearsals?when=${when}&scope=${scope}`),
   get: (id: string) => request<Rehearsal>(`/api/rehearsals/${encodeURIComponent(id)}`),
   create: (body: RehearsalInput) => request<Rehearsal>('/api/rehearsals', { method: 'POST', body }),
   update: (id: string, body: RehearsalInput) =>

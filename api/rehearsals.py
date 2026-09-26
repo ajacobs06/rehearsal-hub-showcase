@@ -131,14 +131,23 @@ def build_view(
 @router.get("")
 def list_rehearsals(
     when: Literal["upcoming", "past"] = "upcoming",
+    scope: Literal["mine", "all"] = "mine",
     me: Member = Depends(current_member),
     store: DocStore = Depends(get_rehearsal_store),
     members: DocStore = Depends(get_store),
     songs: DocStore = Depends(get_song_store),
     progress: DocStore = Depends(get_progress_store),
 ) -> list[RehearsalView]:
+    """`mine` (everyone, including admins): rehearsals for everyone or your groups.
+    `all` (admins): every rehearsal, for the admin page."""
+    if scope == "all" and not is_admin(me):
+        raise HTTPException(403, detail={"reason": "forbidden"})
     now_ = utcnow()
-    all_ = [Rehearsal(**d) for d in store.list_all() if can_see(d.get("groups", []), me)]
+    all_ = [
+        Rehearsal(**d)
+        for d in store.list_all()
+        if scope == "all" or not d.get("groups") or set(d["groups"]) & set(me.groups)
+    ]
     if when == "upcoming":
         chosen = sorted((r for r in all_ if finishes(r) > now_), key=lambda r: r.start)
     else:

@@ -1085,3 +1085,49 @@ label.check input {
   border-radius: 8px;
   background: var(--bg);
 }
+
+/* ---------- Admin page ---------- */
+
+.admin-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.admin-tabs a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 0.875rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  text-decoration: none;
+  font-size: 0.9375rem;
+  white-space: nowrap;
+}
+
+.admin-tabs a:hover {
+  border-color: var(--muted);
+}
+
+.admin-tabs a[aria-current='page'] {
+  background: var(--button);
+  border-color: var(--button);
+  color: var(--button-text);
+  font-weight: 500;
+}
+
+.manage-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--muted);
+}
+
+.detail-title {
+  margin: 0;
+  font-size: 1.375rem;
+  line-height: 1.25;
+}
