@@ -1,5 +1,6 @@
-import { useState } from 'react'
-import { PARTS, api, type Member, type Part } from './api'
+import { useEffect, useState } from 'react'
+import { PARTS, api, rehearsalsApi, type Member, type Part, type Rehearsal } from './api'
+import { RehearsalCard, internalLink } from './Rehearsals'
 import Songs from './Songs'
 
 export default function Home({
@@ -33,6 +34,8 @@ export default function Home({
   return (
     <>
       <h1>Hi {firstName}</h1>
+
+      <NextRehearsal navigate={navigate} />
 
       <section className="panel">
         {editing ? (
@@ -69,5 +72,40 @@ export default function Home({
 
       <Songs me={member} navigate={navigate} />
     </>
+  )
+}
+
+function NextRehearsal({ navigate }: { navigate: (to: string) => void }) {
+  const [next, setNext] = useState<Rehearsal | null | undefined>(undefined)
+
+  useEffect(() => {
+    rehearsalsApi
+      .list('upcoming')
+      .then((list) => setNext(list[0] ?? null))
+      .catch(() => setNext(null))
+  }, [])
+
+  if (next === undefined)
+    return (
+      <div className="panel">
+        <div className="skeleton skeleton-line" />
+        <div className="skeleton skeleton-line short" />
+      </div>
+    )
+
+  return (
+    <section className="stack">
+      <div className="row">
+        <h2>Next rehearsal</h2>
+        <a className="small" {...internalLink('/schedule', navigate)}>
+          Full schedule
+        </a>
+      </div>
+      {next ? (
+        <RehearsalCard r={next} navigate={navigate} onChange={setNext} showSongs />
+      ) : (
+        <p className="muted">Nothing scheduled yet.</p>
+      )}
+    </section>
   )
 }

@@ -193,5 +193,65 @@ export const songsApi = {
   },
 }
 
+// ---------- Rehearsals ----------
+
+export type RsvpResponse = 'yes' | 'maybe' | 'no'
+
+export const RSVP_OPTIONS: { value: RsvpResponse; label: string }[] = [
+  { value: 'yes', label: 'Going' },
+  { value: 'maybe', label: 'Maybe' },
+  { value: 'no', label: "Can't go" },
+]
+
+export interface Rehearsal {
+  id: string
+  start: string
+  end: string | null
+  venue: string
+  notes: string | null
+  songs: {
+    id: string
+    title: string
+    status: SongStatus
+    myPart: Part | null
+    myState: LearnState
+    hasMyTrack: boolean
+  }[]
+  myRsvp: RsvpResponse | null
+  rsvpOpen: boolean
+  counts: { yes: number; maybe: number; no: number; noReply: number }
+  attendees: { memberId: string; name: string; part: Part | null; response: RsvpResponse | null }[] | null
+  songParts: { songId: string; title: string; parts: Record<string, { yes: number; maybe: number }> }[] | null
+}
+
+export interface RehearsalInput {
+  start?: string
+  end?: string | null
+  venue?: string
+  notes?: string | null
+  songIds?: string[]
+}
+
+export const rehearsalsApi = {
+  list: (when: 'upcoming' | 'past' = 'upcoming') => request<Rehearsal[]>(`/api/rehearsals?when=${when}`),
+  get: (id: string) => request<Rehearsal>(`/api/rehearsals/${encodeURIComponent(id)}`),
+  create: (body: RehearsalInput) => request<Rehearsal>('/api/rehearsals', { method: 'POST', body }),
+  update: (id: string, body: RehearsalInput) =>
+    request<Rehearsal>(`/api/rehearsals/${encodeURIComponent(id)}`, { method: 'PATCH', body }),
+  remove: (id: string) => request<void>(`/api/rehearsals/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  rsvp: (id: string, response: RsvpResponse | null) =>
+    request<Rehearsal>(`/api/rehearsals/${encodeURIComponent(id)}/rsvp`, { method: 'PUT', body: { response } }),
+}
+
+const UK = 'Europe/London'
+
+/** "Tue 30 Sep, 7:00 pm to 9:00 pm" in UK time. */
+export function formatWhen(start: string, end: string | null): string {
+  const day = new Date(start).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: UK })
+  const time = (iso: string) =>
+    new Date(iso).toLocaleTimeString('en-GB', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: UK })
+  return end ? `${day}, ${time(start)} to ${time(end)}` : `${day}, ${time(start)}`
+}
+
 export const signInUrl = '/.auth/login/google?post_login_redirect_uri=/'
 export const signOutUrl = '/.auth/logout?post_logout_redirect_uri=/'

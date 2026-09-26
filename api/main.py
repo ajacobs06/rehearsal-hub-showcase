@@ -9,8 +9,9 @@ from fastapi.staticfiles import StaticFiles
 from auth import current_member, easy_auth_enabled, now, require_role
 from mailer import Mailer, get_mailer
 from models import ROLE_RANK, InviteRequest, InviteResponse, MeUpdate, Member, MemberUpdate, Role
+from rehearsals import router as rehearsals_router
 from songs import router as songs_router
-from store import DocStore, get_progress_store, get_store
+from store import DocStore, get_progress_store, get_rehearsal_store, get_store
 from tracker import router as tracker_router
 
 # The React build is copied here at deploy time (see .github/workflows/deploy.yml).
@@ -19,6 +20,7 @@ STATIC_DIR = (Path(__file__).parent / "static").resolve()
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 app.include_router(songs_router)
 app.include_router(tracker_router)
+app.include_router(rehearsals_router)
 
 
 @app.get("/api/health")
@@ -127,6 +129,7 @@ def delete_member(
     actor: Member = Depends(require_role("admin")),
     store: DocStore = Depends(get_store),
     progress: DocStore = Depends(get_progress_store),
+    rehearsals: DocStore = Depends(get_rehearsal_store),
 ) -> None:
     doc = store.get(member_id)
     if doc is None:
@@ -137,6 +140,9 @@ def delete_member(
         raise HTTPException(403, detail={"reason": "forbidden"})
     for p in progress.find("memberId", member_id):
         progress.delete(p["id"], partition=p["songId"])
+    for r in rehearsals.list_all():
+        if member_id in r.get("rsvps", {}):
+            rehearsals.patch(r["id"], remove_fields=[("rsvps", member_id)])
     store.delete(member_id)
 
 

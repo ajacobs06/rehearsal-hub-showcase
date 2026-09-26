@@ -1,6 +1,8 @@
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from datetime import timedelta
+
+from pydantic import AwareDatetime, BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 Part = Literal["tenor", "lead", "bari", "bass"]
 Role = Literal["member", "admin", "owner"]
@@ -164,3 +166,132 @@ class Tracker(BaseModel):
     songs: list[TrackerSong]
     members: list[TrackerMember]
     entries: list[TrackerEntry]  # one per active member x non-retired song
+
+
+# ---------- Rehearsals ----------
+
+RsvpResponse = Literal["yes", "maybe", "no"]
+MAX_REHEARSAL_LENGTH = timedelta(hours=12)
+
+
+def _check_times(start, end) -> None:
+    if end is not None and start is not None:
+        if end <= start:
+            raise ValueError("end must be after start")
+        if end - start > MAX_REHEARSAL_LENGTH:
+            raise ValueError("a rehearsal can't be longer than 12 hours")
+
+
+def _dedupe(ids: list[str]) -> list[str]:
+    return list(dict.fromkeys(ids))
+
+
+class Rsvp(BaseModel):
+    response: RsvpResponse
+    updatedAt: str
+
+
+class Rehearsal(BaseModel):
+    id: str
+    start: AwareDatetime
+    end: AwareDatetime | None = None
+    venue: str = Field(min_length=1, max_length=120)
+    notes: str | None = Field(default=None, max_length=2000)
+    songIds: list[str] = Field(default_factory=list, max_length=30)
+    rsvps: dict[str, Rsvp] = {}
+    createdAt: str
+
+    @model_validator(mode="after")
+    def times(self) -> "Rehearsal":
+        _check_times(self.start, self.end)
+        return self
+
+
+class RehearsalCreate(Request):
+    start: AwareDatetime
+    end: AwareDatetime | None = None
+    venue: str = Field(min_length=1, max_length=120)
+    notes: str | None = Field(default=None, max_length=2000)
+    songIds: list[str] = Field(default_factory=list, max_length=30)
+
+    @field_validator("songIds")
+    @classmethod
+    def dedupe_songs(cls, v: list[str]) -> list[str]:
+        return _dedupe(v)
+
+    @model_validator(mode="after")
+    def times(self) -> "RehearsalCreate":
+        _check_times(self.start, self.end)
+        return self
+
+
+class RehearsalUpdate(Request):
+    start: AwareDatetime | None = None
+    end: AwareDatetime | None = None
+    venue: str | None = Field(default=None, min_length=1, max_length=120)
+    notes: str | None = Field(default=None, max_length=2000)
+    songIds: list[str] | None = Field(default=None, max_length=30)
+
+    @field_validator("start", "venue", "songIds")
+    @classmethod
+    def not_null(cls, v):
+        # Omit a field to leave it unchanged; end and notes may be cleared with null.
+        if v is None:
+            raise ValueError("cannot be null")
+        return _dedupe(v) if isinstance(v, list) else v
+
+
+class RsvpRequest(Request):
+    # Required key; null withdraws the RSVP.
+    response: RsvpResponse | None
+
+
+class RehearsalSong(BaseModel):
+    id: str
+    title: str
+    status: SongStatus
+    myPart: Part | None
+    myState: LearnState
+    hasMyTrack: bool
+
+
+class RsvpCounts(BaseModel):
+    yes: int = 0
+    maybe: int = 0
+    no: int = 0
+    noReply: int = 0
+
+
+class PartCount(BaseModel):
+    yes: int = 0
+    maybe: int = 0
+
+
+class SongParts(BaseModel):
+    """For one song on the plan: how many in each part are coming (by the part they sing on it)."""
+
+    songId: str
+    title: str
+    parts: dict[str, PartCount]  # tenor/lead/bari/bass/none
+
+
+class Attendee(BaseModel):
+    memberId: str
+    name: str
+    part: Part | None
+    response: RsvpResponse | None
+
+
+class RehearsalView(BaseModel):
+    id: str
+    start: AwareDatetime
+    end: AwareDatetime | None
+    venue: str
+    notes: str | None
+    songs: list[RehearsalSong]
+    myRsvp: RsvpResponse | None
+    rsvpOpen: bool
+    counts: RsvpCounts
+    # Admins only:
+    attendees: list[Attendee] | None = None
+    songParts: list[SongParts] | None = None

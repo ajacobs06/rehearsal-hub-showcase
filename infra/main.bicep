@@ -258,6 +258,34 @@ resource devProgress 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/contain
   }
 }
 
+resource prodRehearsals 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-11-15' = {
+  parent: prodDb
+  name: 'rehearsals'
+  properties: {
+    resource: {
+      id: 'rehearsals'
+      partitionKey: {
+        paths: ['/id']
+        kind: 'Hash'
+      }
+    }
+  }
+}
+
+resource devRehearsals 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-11-15' = {
+  parent: devDb
+  name: 'rehearsals'
+  properties: {
+    resource: {
+      id: 'rehearsals'
+      partitionKey: {
+        paths: ['/id']
+        kind: 'Hash'
+      }
+    }
+  }
+}
+
 resource appCosmosAccess 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2024-11-15' = {
   parent: cosmos
   name: guid(cosmos.id, site.id, cosmosDataContributor)

@@ -1,7 +1,9 @@
 import logging
 import os
 from functools import lru_cache
-from typing import Protocol
+from typing import Any, Protocol
+
+Path = tuple[str, ...]
 
 log = logging.getLogger(__name__)
 
@@ -14,6 +16,16 @@ class DocStore(Protocol):
     def list_all(self) -> list[dict]: ...
     def upsert(self, doc: dict) -> None: ...
     def delete(self, doc_id: str, partition: str | None = None) -> None: ...
+    def patch(
+        self,
+        doc_id: str,
+        set_fields: dict[Path, Any] | None = None,
+        remove_fields: list[Path] | None = None,
+        partition: str | None = None,
+    ) -> dict | None:
+        """Atomically set/remove fields without rewriting the doc (so concurrent edits to other
+        fields aren't lost). Removing a missing field is a no-op. Returns the doc, or None if absent."""
+        ...
 
 
 class InMemoryStore:
@@ -37,6 +49,22 @@ class InMemoryStore:
 
     def delete(self, doc_id: str, partition: str | None = None) -> None:
         self.docs.pop(doc_id, None)
+
+    def patch(self, doc_id, set_fields=None, remove_fields=None, partition=None):
+        doc = self.docs.get(doc_id)
+        if doc is None:
+            return None
+        for path, value in (set_fields or {}).items():
+            target = doc
+            for key in path[:-1]:
+                target = target.setdefault(key, {})
+            target[path[-1]] = value
+        for path in remove_fields or []:
+            target = doc
+            for key in path[:-1]:
+                target = target.get(key, {})
+            target.pop(path[-1], None)
+        return dict(doc)
 
 
 class CosmosStore:
@@ -77,6 +105,40 @@ class CosmosStore:
             self.container.delete_item(doc_id, partition_key=partition or doc_id)
         except CosmosResourceNotFoundError:
             pass
+
+    def patch(self, doc_id, set_fields=None, remove_fields=None, partition=None):
+        from azure.cosmos.exceptions import CosmosResourceNotFoundError
+
+        pk = partition or doc_id
+        ops = [{"op": "set", "path": _pointer(p), "value": v} for p, v in (set_fields or {}).items()]
+        if remove_fields:
+            # Cosmos rejects removing a path that doesn't exist, so only remove what is there.
+            current = self.get(doc_id, partition=pk)
+            if current is None:
+                return None
+            ops += [{"op": "remove", "path": _pointer(p)} for p in remove_fields if _get_path(current, p) is not None]
+        if not ops:
+            return self.get(doc_id, partition=pk)
+        try:
+            doc = None
+            for i in range(0, len(ops), 10):  # Cosmos allows 10 operations per patch
+                doc = self.container.patch_item(doc_id, partition_key=pk, patch_operations=ops[i : i + 10])
+            return _strip(doc)
+        except CosmosResourceNotFoundError:
+            return None
+
+
+def _pointer(path: Path) -> str:
+    """JSON Pointer for a Cosmos patch op; escapes ~ and / inside keys."""
+    return "".join("/" + k.replace("~", "~0").replace("/", "~1") for k in path)
+
+
+def _get_path(doc: dict, path: Path) -> Any:
+    for key in path:
+        if not isinstance(doc, dict) or key not in doc:
+            return None
+        doc = doc[key]
+    return doc
 
 
 def _strip(item: dict) -> dict:
@@ -121,3 +183,8 @@ def get_song_store() -> DocStore:
 def get_progress_store() -> DocStore:
     """Per member per song (pk /songId, id "<memberId>:<songId>"): part override, later learned state."""
     return _make_store("progress")
+
+
+@lru_cache
+def get_rehearsal_store() -> DocStore:
+    return _make_store("rehearsals")

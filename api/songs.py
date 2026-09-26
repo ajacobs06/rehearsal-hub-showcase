@@ -18,7 +18,7 @@ from models import (
     SongView,
     UploadTicket,
 )
-from store import DocStore, get_progress_store, get_song_store
+from store import DocStore, get_progress_store, get_rehearsal_store, get_song_store
 from tracks import TrackStore, get_track_store
 
 router = APIRouter(prefix="/api/songs")
@@ -182,12 +182,16 @@ def delete_song(
     admin: Member = Depends(require_role("admin")),
     store: DocStore = Depends(get_song_store),
     progress: DocStore = Depends(get_progress_store),
+    rehearsals: DocStore = Depends(get_rehearsal_store),
     tracks: TrackStore = Depends(get_track_store),
 ) -> None:
     load_song(store, song_id, admin)
     tracks.delete_prefix(f"{song_id}/")
     for doc in progress.find("songId", song_id):
         progress.delete(doc["id"], partition=song_id)
+    for r in rehearsals.list_all():
+        if song_id in r.get("songIds", []):
+            rehearsals.patch(r["id"], {("songIds",): [s for s in r["songIds"] if s != song_id]})
     store.delete(song_id)
 
 
