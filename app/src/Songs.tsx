@@ -21,9 +21,7 @@ export default function Songs({ navigate }: { navigate: (to: string) => void }) 
 
   return (
     <section className="songs">
-      <div className="section-head">
-        <h2>Songs</h2>
-      </div>
+      <h1>Songs</h1>
       {filters}
 
       {songs === null ? (

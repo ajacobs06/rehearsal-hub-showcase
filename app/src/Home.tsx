@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { PARTS, api, rehearsalsApi, type Member, type Part, type Rehearsal } from './api'
 import { RehearsalCard, internalLink } from './Rehearsals'
-import Songs from './Songs'
 
 export default function Home({
   member,
@@ -70,7 +69,6 @@ export default function Home({
         )}
       </section>
 
-      <Songs navigate={navigate} />
     </>
   )
 }
@@ -104,7 +102,12 @@ function NextRehearsal({ navigate }: { navigate: (to: string) => void }) {
       {next ? (
         <RehearsalCard r={next} navigate={navigate} onChange={setNext} showSongs />
       ) : (
-        <p className="muted">Nothing scheduled yet.</p>
+        <div className="panel quiet empty-next">
+          <p className="muted">Nothing scheduled yet.</p>
+          <a className="button secondary" {...internalLink('/songs', navigate)}>
+            Browse songs
+          </a>
+        </div>
       )}
     </section>
   )

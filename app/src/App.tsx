@@ -12,6 +12,7 @@ import Privacy from './Privacy'
 import RehearsalPage from './RehearsalPage'
 import Schedule from './Schedule'
 import SongPage from './SongPage'
+import Songs from './Songs'
 
 type Session =
   | { kind: 'loading' }
@@ -141,6 +142,8 @@ export default function App() {
   const adminPath = pathname === '/members' ? '/admin/members' : pathname === '/tracker' ? '/admin/tracker' : pathname
   const view = isAdmin && adminPath.startsWith('/admin')
     ? 'admin'
+    : pathname === '/songs'
+      ? 'songs'
     : pathname === '/schedule'
       ? 'schedule'
       : pathname === '/privacy'
@@ -190,6 +193,7 @@ export default function App() {
         {/* Top bar on wider screens, bottom tab bar on phones (see index.css). */}
         <nav className="primary" aria-label="Main">
           {link('/', 'Home', view === 'home')}
+          {link('/songs', 'Songs', view === 'songs' || view === 'song')}
           {link('/schedule', 'Schedule', view === 'schedule' || view === 'rehearsal')}
           {isAdmin && link('/admin', 'Admin', view === 'admin')}
         </nav>
@@ -200,6 +204,8 @@ export default function App() {
       <main className="page">
         {view === 'admin' ? (
           <Admin path={adminPath} me={member} navigate={navigate} />
+        ) : view === 'songs' ? (
+          <Songs navigate={navigate} />
         ) : view === 'schedule' ? (
           <Schedule navigate={navigate} />
         ) : view === 'rehearsal' && rehearsalId ? (

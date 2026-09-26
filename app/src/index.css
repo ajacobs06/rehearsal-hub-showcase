@@ -1371,3 +1371,9 @@ a.wordmark img {
   min-width: 44px;
   justify-content: center;
 }
+
+.empty-next {
+  display: grid;
+  gap: 0.75rem;
+  justify-items: start;
+}

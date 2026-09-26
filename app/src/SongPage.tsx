@@ -31,10 +31,10 @@ export default function SongPage({ id, me, navigate }: { id: string; me: Member;
   const back = (
     <a
       className="back"
-      href="/"
+      href="/songs"
       onClick={(e) => {
         e.preventDefault()
-        navigate('/')
+        navigate('/songs')
       }}
     >
       All songs
