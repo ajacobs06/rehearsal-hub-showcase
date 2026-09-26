@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ApiError, api, signInUrl, signOutUrl, type Member } from './api'
+
+// The BSS badge, used as-is: never recoloured, stretched or cropped.
+const LOGO = '/bss-logo.png'
 import Home from './Home'
 import Admin from './Admin'
 import RehearsalPage from './RehearsalPage'
@@ -58,13 +61,21 @@ export default function App() {
 
   if (session.kind === 'signed-out') {
     return (
-      <main className="page gate">
-        <h1>Rehearsal Hub</h1>
-        <p className="lede">Learning tracks and rehearsal plans for the UoB Barbershop Singing Society.</p>
-        <a className="button" href={signInUrl}>
-          Sign in with Google
-        </a>
-        <p className="muted small">Use the email address the committee invited.</p>
+      <main className="page gate welcome">
+        <img className="gate-logo" src={LOGO} alt="Barbershop Singing Society" width={144} height={144} />
+        <div className="gate-copy">
+          <h1>Rehearsal Hub</h1>
+          <p className="lede">
+            Learning tracks, progress and the rehearsal schedule for members of the University of Birmingham Barbershop
+            Singing Society.
+          </p>
+        </div>
+        <div className="gate-action">
+          <a className="button" href={signInUrl}>
+            Sign in with Google
+          </a>
+          <p className="muted small">Not on the list yet? Ask the committee to invite the Google account you'll use.</p>
+        </div>
       </main>
     )
   }
@@ -72,6 +83,7 @@ export default function App() {
   if (session.kind === 'not-invited') {
     return (
       <main className="page gate">
+        <img className="gate-logo small" src={LOGO} alt="Barbershop Singing Society" width={96} height={96} />
         <h1>You're not on the list yet</h1>
         <p className="lede">
           You're signed in as <strong>{session.email}</strong>, but that address hasn't been invited.
@@ -87,6 +99,7 @@ export default function App() {
   if (session.kind === 'error') {
     return (
       <main className="page gate">
+        <img className="gate-logo small" src={LOGO} alt="Barbershop Singing Society" width={96} height={96} />
         <h1>Something went wrong</h1>
         <p className="lede">We couldn't reach Rehearsal Hub. Check your connection and try again.</p>
         <button className="button" onClick={load}>
@@ -136,6 +149,7 @@ export default function App() {
             navigate('/')
           }}
         >
+          <img src={LOGO} alt="" width={32} height={32} />
           Rehearsal Hub
         </a>
         {/* Top bar on wider screens, bottom tab bar on phones (see index.css). */}

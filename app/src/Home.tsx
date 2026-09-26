@@ -97,7 +97,7 @@ function NextRehearsal({ navigate }: { navigate: (to: string) => void }) {
     <section className="stack">
       <div className="row">
         <h2>Next rehearsal</h2>
-        <a className="small" {...internalLink('/schedule', navigate)}>
+        <a className="small text-link" {...internalLink('/schedule', navigate)}>
           Full schedule
         </a>
       </div>

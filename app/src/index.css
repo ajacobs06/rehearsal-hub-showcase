@@ -1,24 +1,25 @@
-/* Rehearsal Hub: warm monochrome, one muted accent (cobalt), flat 1px borders.
+/* Rehearsal Hub brand (BSS): dark only, true black to match the logo badge, one violet accent.
+   Only this block defines colours; everything else uses the tokens.
    Radius rule: panels 8px, controls 6px, pills only for small status badges. */
 
 :root {
-  color-scheme: light dark;
-  --bg: #fbfbfa;
-  --surface: #ffffff;
-  --text: #2f3437;
-  --muted: #6b6a67;
-  --border: #eaeaea;
-  --button: #111111;
-  --button-hover: #333333;
-  --button-text: #ffffff;
-  --accent: #1f6c9f;
-  --danger: #9f2f2d;
-  --success: #346538;
-  --pale-blue: #e1f3fe;
-  --pale-yellow: #fbf3db;
-  --pale-yellow-text: #7a5200;
-  --pale-green: #edf3ec;
-  --skeleton: #efeeec;
+  color-scheme: dark;
+  --bg: #000000; /* the logo's black, so the badge blends in */
+  --surface: #121214;
+  --raised: #1b1b1e;
+  --text: #f2f2f2;
+  --muted: #a3a3a8;
+  --border: #26262a; /* dividers and panel edges */
+  --control-border: #6b6b72; /* inputs and secondary buttons: 3:1 or better */
+  --button: #f2f2f2;
+  --button-hover: #d6d6d6;
+  --button-text: #0a0a0a;
+  --accent: #a378e3; /* BSS violet, lightened for dark backgrounds */
+  --accent-hover: #bb9aec;
+  --accent-soft: #241b35;
+  --neutral-soft: #232327;
+  --danger: #f58b83;
+  --skeleton: #1e1e21;
 
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', 'Segoe UI', sans-serif;
   font-size: 16px;
@@ -26,27 +27,6 @@
   color: var(--text);
   background: var(--bg);
   -webkit-text-size-adjust: 100%;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #151515;
-    --surface: #1c1c1c;
-    --text: #ecebe8;
-    --muted: #a3a29e;
-    --border: #2c2c2b;
-    --button: #ecebe8;
-    --button-hover: #d4d3cf;
-    --button-text: #151515;
-    --accent: #7cc0ec;
-    --danger: #f19b98;
-    --success: #9cc79f;
-    --pale-blue: #17303f;
-    --pale-yellow: #3a3017;
-    --pale-yellow-text: #f0d48a;
-    --pale-green: #1f2e20;
-    --skeleton: #262625;
-  }
 }
 
 * {
@@ -78,6 +58,10 @@ h2 {
 
 a {
   color: var(--accent);
+}
+
+a:hover {
+  color: var(--accent-hover);
 }
 
 :focus-visible {
@@ -113,7 +97,7 @@ a {
   padding: 0 1rem;
   padding-top: env(safe-area-inset-top);
   border-bottom: 1px solid var(--border);
-  background: var(--surface);
+  background: var(--bg);
 }
 
 .wordmark {
@@ -239,7 +223,7 @@ a {
 .button.secondary {
   background: transparent;
   color: var(--text);
-  border-color: var(--border);
+  border-color: var(--control-border);
 }
 
 .button.secondary:hover {
@@ -253,7 +237,7 @@ a {
 }
 
 .button.small {
-  min-height: 36px;
+  min-height: 44px;
   padding: 0 0.75rem;
   font-size: 0.875rem;
 }
@@ -287,7 +271,7 @@ a {
 
 .segmented button {
   min-height: 48px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--control-border);
   border-radius: 6px;
   background: var(--surface);
   color: var(--text);
@@ -339,7 +323,7 @@ select {
   min-height: 44px;
   width: 100%;
   padding: 0 0.75rem;
-  border: 1px solid var(--border);
+  border: 1px solid var(--control-border);
   border-radius: 6px;
   background: var(--surface);
   color: var(--text);
@@ -365,7 +349,7 @@ select:hover {
 }
 
 .success {
-  color: var(--success);
+  color: var(--accent);
   margin-top: 0.75rem;
 }
 
@@ -439,13 +423,13 @@ select:hover {
 
 .badge.admin,
 .badge.owner {
-  background: var(--pale-blue);
+  background: var(--accent-soft);
   color: var(--accent);
 }
 
 .badge.invited {
-  background: var(--pale-yellow);
-  color: var(--pale-yellow-text);
+  background: var(--neutral-soft);
+  color: var(--muted);
 }
 
 .member-actions {
@@ -456,7 +440,7 @@ select:hover {
 }
 
 .member-actions select {
-  min-height: 36px;
+  min-height: 44px;
   width: auto;
   font-size: 0.875rem;
 }
@@ -579,7 +563,7 @@ h3 {
 }
 
 .ready {
-  color: var(--success);
+  color: var(--accent);
 }
 
 .back {
@@ -601,17 +585,17 @@ h3 {
 }
 
 .badge.status-learning {
-  background: var(--pale-blue);
+  background: var(--accent-soft);
   color: var(--accent);
 }
 
 .badge.status-performing {
-  background: var(--pale-green);
-  color: var(--success);
+  background: var(--button);
+  color: var(--button-text);
 }
 
 .badge.status-retired {
-  background: var(--skeleton);
+  background: var(--neutral-soft);
   color: var(--muted);
 }
 
@@ -706,23 +690,23 @@ progress {
 /* ---------- Learned state ---------- */
 
 .badge.state-not_started {
-  background: var(--skeleton);
+  background: var(--neutral-soft);
   color: var(--muted);
 }
 
 .badge.state-learning {
-  background: var(--pale-yellow);
-  color: var(--pale-yellow-text);
+  background: var(--neutral-soft);
+  color: var(--text);
 }
 
 .badge.state-learned {
-  background: var(--pale-blue);
+  background: var(--accent-soft);
   color: var(--accent);
 }
 
 .badge.state-ready {
-  background: var(--pale-green);
-  color: var(--success);
+  background: var(--accent);
+  color: var(--button-text);
 }
 
 .song-head {
@@ -790,7 +774,7 @@ progress {
 }
 
 .count-done {
-  color: var(--success);
+  color: var(--accent);
 }
 
 .song-detail {
@@ -902,7 +886,7 @@ table.grid {
   }
 
   .topbar nav.primary a[aria-current='page'] {
-    box-shadow: inset 0 2px 0 var(--text);
+    box-shadow: inset 0 2px 0 var(--accent);
     border-radius: 0;
   }
 
@@ -956,8 +940,8 @@ h4 {
   list-style: none;
   margin: 0;
   padding: 0;
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
 }
 
 .prep-list li + li {
@@ -968,7 +952,7 @@ h4 {
   display: grid;
   gap: 0.125rem;
   min-height: 44px;
-  padding: 0.625rem 0.875rem;
+  padding: 0.625rem 0;
   color: var(--text);
   text-decoration: none;
 }
@@ -994,7 +978,7 @@ section > .prep-list {
 textarea {
   width: 100%;
   padding: 0.625rem 0.75rem;
-  border: 1px solid var(--border);
+  border: 1px solid var(--control-border);
   border-radius: 6px;
   background: var(--surface);
   color: var(--text);
@@ -1023,7 +1007,7 @@ label.check {
   display: flex;
   align-items: center;
   gap: 0.625rem;
-  min-height: 40px;
+  min-height: 44px;
   font-weight: 400;
   font-size: 1rem;
 }
@@ -1032,7 +1016,7 @@ label.check input {
   width: 20px;
   min-height: 20px;
   height: 20px;
-  accent-color: var(--text);
+  accent-color: var(--accent);
 }
 
 .replies {
@@ -1080,10 +1064,8 @@ label.check input {
   display: grid;
   gap: 0.75rem;
   grid-column: 1 / -1;
-  padding: 0.75rem;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg);
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
 }
 
 /* ---------- Admin page ---------- */
@@ -1097,9 +1079,9 @@ label.check input {
 .admin-tabs a {
   display: inline-flex;
   align-items: center;
-  min-height: 40px;
+  min-height: 44px;
   padding: 0 0.875rem;
-  border: 1px solid var(--border);
+  border: 1px solid var(--control-border);
   border-radius: 6px;
   background: var(--surface);
   color: var(--text);
@@ -1135,4 +1117,79 @@ label.check input {
 .group-warning {
   grid-column: 1 / -1;
   color: var(--danger);
+}
+
+/* A rehearsal page's "Songs to prepare" stands alone, so it keeps its own box. */
+section > .prep-list {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+section > .prep-list a {
+  padding: 0.625rem 0.875rem;
+}
+
+/* ---------- Brand: header badge and sign-in pages ---------- */
+
+a.wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.625rem;
+  min-height: 44px;
+}
+
+a.wordmark img {
+  display: block;
+  width: 32px;
+  height: 32px;
+}
+
+.gate {
+  justify-items: center;
+  text-align: center;
+  gap: 1.5rem;
+}
+
+.gate-logo {
+  display: block;
+  width: 144px;
+  height: 144px;
+}
+
+.gate-logo.small {
+  width: 96px;
+  height: 96px;
+}
+
+.gate-copy {
+  display: grid;
+  gap: 0.5rem;
+  max-width: 26rem;
+}
+
+.gate-copy h1 {
+  margin: 0;
+  font-size: 2rem;
+  letter-spacing: -0.02em;
+}
+
+.gate-action {
+  display: grid;
+  gap: 0.75rem;
+  justify-items: center;
+  max-width: 22rem;
+}
+
+/* Stand-alone text links still get a 44px tap target. */
+.text-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+
+/* Welcome page: anchored near the top (Taste Skill hero top-padding cap), not centred mid-screen. */
+.gate.welcome {
+  align-content: start;
+  padding-top: clamp(3rem, 10vh, 5rem);
 }
