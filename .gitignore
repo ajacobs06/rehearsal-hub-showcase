@@ -44,3 +44,6 @@ __queuestorage__/
 
 # --- Local snapshot of the planning doc (source of truth is the live doc) ---
 Barbershop Rehearsal Hub*.md
+
+# FastAPI build output copied in at deploy time
+api/static/
