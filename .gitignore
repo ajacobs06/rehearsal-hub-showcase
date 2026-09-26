@@ -1,0 +1,46 @@
+# --- Secrets (never commit) ---
+.env
+.env.*
+!.env.example
+local.settings.json
+*.pem
+*.pfx
+
+# --- macOS / editors ---
+.DS_Store
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+
+# --- Node / front end ---
+node_modules/
+dist/
+build/
+.vite/
+npm-debug.log*
+
+# --- Python / Azure Functions ---
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.python_packages/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# --- Azure tooling ---
+.azure/
+__azurite_db*
+__blobstorage__/
+__queuestorage__/
+.swa/
+
+# --- Media (tracks/scores live in Blob Storage, not Git) ---
+*.mp3
+*.wav
+*.m4a
+
+# --- Local snapshot of the planning doc (source of truth is the live doc) ---
+Barbershop Rehearsal Hub*.md
