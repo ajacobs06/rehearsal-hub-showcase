@@ -50,3 +50,7 @@ api/static/
 
 # Security audit reports (sensitive; never commit)
 security-audit/
+
+# Publish profiles contain deploy credentials
+*.PublishSettings
+*.publishsettings

@@ -9,6 +9,9 @@ param location string = 'francecentral'
 @description('Object ID of the developer, granted access to the dev database and Key Vault secrets.')
 param developerPrincipalId string
 
+@description('GitHub repository allowed to deploy, as owner/name.')
+param githubRepo string = 'ajacobs06/rehearsal-hub'
+
 @description('Google OAuth client ID. Leave empty to deploy without sign-in enabled.')
 param googleClientId string = ''
 
@@ -21,6 +24,7 @@ var keyVaultSecretsOfficer = 'b86a8fe4-44ce-4948-aee5-eccb2c155cd7'
 var cosmosDataContributor = '00000000-0000-0000-0000-000000000002'
 var storageBlobDataContributor = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
 var storageBlobDelegator = 'db58b8e5-c6ad-4a2a-8342-4190687cbf4a'
+var websiteContributor = 'de139f84-1756-47ae-9be6-808fbbe84772'
 
 // ---------- Web app ----------
 
@@ -74,14 +78,53 @@ resource appSettings 'Microsoft.Web/sites/config@2023-12-01' = {
   dependsOn: [appVaultAccess]
 }
 
-// GitHub Actions deploys with the publish profile, which needs SCM basic auth.
+// No basic-auth publishing: GitHub Actions deploys with OIDC as the identity below.
 resource scmPolicy 'Microsoft.Web/sites/basicPublishingCredentialsPolicies@2023-12-01' = {
   parent: site
   name: 'scm'
   properties: {
-    allow: true
+    allow: false
   }
 }
+
+resource ftpPolicy 'Microsoft.Web/sites/basicPublishingCredentialsPolicies@2023-12-01' = {
+  parent: site
+  name: 'ftp'
+  properties: {
+    allow: false
+  }
+}
+
+// ---------- Deploy identity (GitHub Actions OIDC, no stored secret) ----------
+// A user-assigned identity instead of an app registration (the UoB tenant blocks those). It trusts
+// only jobs in this repo's `production` environment and can only manage this web app.
+
+resource deployIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: 'id-rehearsal-hub-deploy'
+  location: location
+}
+
+resource deployFederation 'Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials@2023-01-31' = {
+  parent: deployIdentity
+  name: 'github-production'
+  properties: {
+    issuer: 'https://token.actions.githubusercontent.com'
+    subject: 'repo:${githubRepo}:environment:production'
+    audiences: ['api://AzureADTokenExchange']
+  }
+}
+
+resource deployAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: site
+  name: guid(site.id, deployIdentity.id, websiteContributor)
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', websiteContributor)
+    principalId: deployIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+output deployClientId string = deployIdentity.properties.clientId
 
 // Easy Auth: Google sign-in. Anonymous requests are allowed so the app shell and /api/health load;
 // the API decides per endpoint. Easy Auth strips client-supplied X-MS-CLIENT-PRINCIPAL headers.
