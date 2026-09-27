@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { announcementsApi, formatDay, type Announcement } from './api'
 import { ForGroups, internalLink } from './Rehearsals'
 
@@ -23,23 +23,57 @@ function Linked({ text }: { text: string }) {
   )
 }
 
-/** Plain text: blank lines make paragraphs, single line breaks are kept. `preview` shows only the
- * first paragraph, cut to a few lines. */
-export function AnnouncementBody({ text, preview = false }: { text: string; preview?: boolean }) {
-  const paragraphs = text.split(/\n\s*\n/).filter((p) => p.trim())
+function Paragraphs({ text }: { text: string }) {
+  return (
+    <>
+      {text
+        .split(/\n\s*\n/)
+        .filter((p) => p.trim())
+        .map((p, i) => (
+          <p key={i}>
+            {p.split('\n').map((line, j) => (
+              <Fragment key={j}>
+                {j > 0 && <br />}
+                <Linked text={line} />
+              </Fragment>
+            ))}
+          </p>
+        ))}
+    </>
+  )
+}
+
+/** Plain text: blank lines make paragraphs, single line breaks are kept. */
+export function AnnouncementBody({ text }: { text: string }) {
   return (
     <div className="post-body">
-      {(preview ? paragraphs.slice(0, 1) : paragraphs).map((p, i) => (
-        <p key={i} className={preview ? 'clamp' : undefined}>
-          {p.split('\n').map((line, j) => (
-            <Fragment key={j}>
-              {j > 0 && <br />}
-              <Linked text={line} />
-            </Fragment>
-          ))}
-        </p>
-      ))}
+      <Paragraphs text={text} />
     </div>
+  )
+}
+
+/** Home: the post cut to 10 lines with an ellipsis; `more` shows only when something was cut. */
+function AnnouncementPreview({ text, more }: { text: string; more: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [cut, setCut] = useState(false)
+
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const check = () => setCut(el.scrollHeight > el.clientHeight + 1)
+    check()
+    const observer = new ResizeObserver(check)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [text])
+
+  return (
+    <>
+      <div ref={ref} className="post-body clamp">
+        <Paragraphs text={text} />
+      </div>
+      {cut && more}
+    </>
   )
 }
 
@@ -159,7 +193,14 @@ export function LatestAnnouncement({ navigate }: { navigate: Navigate }) {
           <a {...internalLink(`/announcements/${latest.id}`, navigate)}>{latest.title}</a>
         </h3>
         <p className="muted small">{byline(latest)}</p>
-        <AnnouncementBody text={latest.body} preview />
+        <AnnouncementPreview
+          text={latest.body}
+          more={
+            <a className="small text-link" {...internalLink(`/announcements/${latest.id}`, navigate)}>
+              Read more
+            </a>
+          }
+        />
       </article>
     </section>
   )

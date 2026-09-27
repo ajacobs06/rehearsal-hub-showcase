@@ -1143,13 +1143,22 @@ label.check input {
   margin: 0;
 }
 
-/* Home preview: the first paragraph, cut to four lines. */
-.post-body p.clamp {
+/* Home preview: the whole post cut to 10 lines, ending in an ellipsis. Line clamping needs a
+   -webkit-box, so paragraphs are spaced with margins instead of the grid gap. */
+.post-body.clamp {
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 4;
-  line-clamp: 4;
+  -webkit-line-clamp: 10;
+  line-clamp: 10;
   overflow: hidden;
+}
+
+.post-body.clamp p + p {
+  margin-top: 0.75rem;
+}
+
+.post-card .text-link {
+  justify-self: start;
 }
 
 /* ---------- Admin page ---------- */
