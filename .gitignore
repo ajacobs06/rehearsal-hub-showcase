@@ -22,6 +22,7 @@ npm-debug.log*
 
 # --- Python / Azure Functions ---
 .venv/
+api/pydeps/
 venv/
 __pycache__/
 *.py[cod]

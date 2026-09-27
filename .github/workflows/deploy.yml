@@ -40,6 +40,25 @@ jobs:
           pip install -r requirements-dev.txt
           pytest -q
 
+      # The free plan has a daily CPU quota, and building on App Service (Oryx pip install) can use
+      # it all up. So dependencies are installed here and App Service only runs the package.
+      - name: Package API dependencies
+        run: pip install --target api/pydeps -r api/requirements.txt
+
+      # Boot the exact package with nothing else installed, so a package that can't start fails
+      # here and never reaches App Service.
+      - name: Smoke test the package
+        working-directory: api
+        run: |
+          python -m venv /tmp/bare
+          PYTHONPATH=pydeps /tmp/bare/bin/python -m gunicorn -w 1 -k worker.Worker main:app --bind 127.0.0.1:8000 &
+          pid=$!
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8000/api/health; then kill $pid; exit 0; fi
+            sleep 1
+          done
+          echo "The package did not start"; exit 1
+
       - name: Bundle front end into API
         run: cp -R app/dist api/static
 
@@ -48,8 +67,9 @@ jobs:
           name: site
           path: |
             api
-            !api/**/__pycache__
+            !api/__pycache__
             !api/.pytest_cache
+            !api/.venv
 
   deploy:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'

@@ -69,7 +69,8 @@ resource site 'Microsoft.Web/sites@2023-12-01' = {
     httpsOnly: true
     siteConfig: {
       linuxFxVersion: 'PYTHON|3.11'
-      appCommandLine: 'gunicorn -w 2 -k worker.Worker main:app'
+      // Dependencies come prebuilt in pydeps/ (see PYTHONPATH below and the deploy workflow).
+      appCommandLine: 'python -m gunicorn -w 2 -k worker.Worker main:app'
       ftpsState: 'Disabled'
       minTlsVersion: '1.2'
     }
@@ -80,7 +81,11 @@ resource appSettings 'Microsoft.Web/sites/config@2023-12-01' = {
   parent: site
   name: 'appsettings'
   properties: union({
-    SCM_DO_BUILD_DURING_DEPLOYMENT: 'true'
+    // Never build on App Service: an Oryx pip install can use up the free plan's daily CPU quota
+    // (it did on the first deploy here). GitHub Actions ships the dependencies in pydeps/.
+    SCM_DO_BUILD_DURING_DEPLOYMENT: 'false'
+    ENABLE_ORYX_BUILD: 'false'
+    PYTHONPATH: '/home/site/wwwroot/pydeps'
     APP_URL: 'https://${site.properties.defaultHostName}'
     COSMOS_ENDPOINT: cosmos.properties.documentEndpoint
     COSMOS_DATABASE: prodDb.name
