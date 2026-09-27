@@ -9,6 +9,8 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from account import router as account_router
+from announcements import forget_author
+from announcements import router as announcements_router
 from auth import current_member, dev_auth_enabled, easy_auth_enabled, now, require_role
 from entra import EntraDirectory, delete_sign_in_accounts, get_directory
 from feedback import router as feedback_router
@@ -20,7 +22,15 @@ from songs import router as songs_router
 from groups import check_groups, require_owner_for_admin_groups
 from groups import router as groups_router
 from roles import admin_group_ids, current_role, derived_role, member_groups
-from store import DocStore, get_feedback_store, get_group_store, get_progress_store, get_rehearsal_store, get_store
+from store import (
+    DocStore,
+    get_announcement_store,
+    get_feedback_store,
+    get_group_store,
+    get_progress_store,
+    get_rehearsal_store,
+    get_store,
+)
 from tracker import router as tracker_router
 
 # The React build is copied here at deploy time (see .github/workflows/deploy.yml).
@@ -52,6 +62,7 @@ app.include_router(rehearsals_router)
 app.include_router(groups_router)
 app.include_router(feedback_router)
 app.include_router(account_router)
+app.include_router(announcements_router)
 
 
 @app.get("/api/health")
@@ -195,6 +206,7 @@ def delete_member(
     feedback: DocStore = Depends(get_feedback_store),
     groups: DocStore = Depends(get_group_store),
     directory: EntraDirectory = Depends(get_directory),
+    announcements: DocStore = Depends(get_announcement_store),
 ) -> None:
     doc = store.get(member_id)
     if doc is None:
@@ -211,6 +223,7 @@ def delete_member(
             rehearsals.patch(r["id"], remove_fields=[("rsvps", member_id)])
     for f in feedback.find("memberId", member_id):
         feedback.delete(f["id"])
+    forget_author(announcements, member_id)
     store.delete(member_id)
 
 

@@ -2,10 +2,18 @@
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from announcements import forget_author
 from auth import current_member, now
 from entra import EntraDirectory, delete_sign_in_accounts, get_directory
 from models import Member
-from store import DocStore, get_feedback_store, get_progress_store, get_rehearsal_store, get_store
+from store import (
+    DocStore,
+    get_announcement_store,
+    get_feedback_store,
+    get_progress_store,
+    get_rehearsal_store,
+    get_store,
+)
 
 router = APIRouter(prefix="/api/me")
 
@@ -16,6 +24,7 @@ def export_my_data(
     progress: DocStore = Depends(get_progress_store),
     rehearsals: DocStore = Depends(get_rehearsal_store),
     feedback: DocStore = Depends(get_feedback_store),
+    announcements: DocStore = Depends(get_announcement_store),
 ) -> dict:
     return {
         "exportedAt": now(),
@@ -27,6 +36,11 @@ def export_my_data(
             if me.id in r.get("rsvps", {})
         ],
         "feedback": feedback.find("memberId", me.id),
+        # Posted as an admin: signed with your name.
+        "announcements": [
+            {"id": d["id"], "title": d["title"], "createdAt": d["createdAt"]}
+            for d in announcements.find("authorId", me.id)
+        ],
     }
 
 
@@ -38,6 +52,7 @@ def delete_my_account(
     rehearsals: DocStore = Depends(get_rehearsal_store),
     feedback: DocStore = Depends(get_feedback_store),
     directory: EntraDirectory = Depends(get_directory),
+    announcements: DocStore = Depends(get_announcement_store),
 ) -> None:
     # The site must always have an owner: hand ownership over first.
     if me.role == "owner":
@@ -50,4 +65,5 @@ def delete_my_account(
             rehearsals.patch(r["id"], remove_fields=[("rsvps", me.id)])
     for d in feedback.find("memberId", me.id):
         feedback.delete(d["id"])
+    forget_author(announcements, me.id)
     members.delete(me.id)

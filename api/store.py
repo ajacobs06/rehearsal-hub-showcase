@@ -199,3 +199,8 @@ def get_group_store() -> DocStore:
 @lru_cache
 def get_feedback_store() -> DocStore:
     return _make_store("feedback")
+
+
+@lru_cache
+def get_announcement_store() -> DocStore:
+    return _make_store("announcements")

@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from auth import current_member, require_role
 from models import Group, GroupCreate, GroupMembers, GroupUpdate, Member
 from roles import DEFAULT_GROUPS, admin_group_ids, derived_role, group_ids, member_groups, stored_groups
-from store import DocStore, get_group_store, get_rehearsal_store, get_store
+from store import DocStore, get_announcement_store, get_group_store, get_rehearsal_store, get_store
 
 router = APIRouter(prefix="/api/groups")
 
@@ -116,6 +116,7 @@ def delete_group(
     groups: DocStore = Depends(get_group_store),
     members: DocStore = Depends(get_store),
     rehearsals: DocStore = Depends(get_rehearsal_store),
+    announcements: DocStore = Depends(get_announcement_store),
 ) -> None:
     doc = load_group(groups, group_id)
     if doc.get("admin") and actor.role != "owner":
@@ -127,6 +128,13 @@ def delete_group(
     for r in rehearsals.list_all():
         if group_id in r.get("groups", []):
             rehearsals.patch(r["id"], {("groups",): [g for g in r["groups"] if g != group_id]})
+    # An announcement loses the group only if it has others. If it was the only audience the id
+    # stays: it matches nobody, so the post is for admins only rather than suddenly for everyone
+    # (which an empty list would mean).
+    for a in announcements.list_all():
+        rest = [g for g in a.get("groups", []) if g != group_id]
+        if group_id in a.get("groups", []) and rest:
+            announcements.patch(a["id"], {("groups",): rest})
     if doc.get("admin"):
         recompute_roles(members, admin_group_ids(groups))
 

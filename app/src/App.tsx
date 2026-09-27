@@ -7,6 +7,7 @@ import Home from './Home'
 import { internalLink } from './Rehearsals'
 import Account from './Account'
 import Admin from './Admin'
+import { AnnouncementPage, AnnouncementsPage } from './Announcements'
 import FeedbackPage from './FeedbackPage'
 import Privacy from './Privacy'
 import RehearsalPage from './RehearsalPage'
@@ -151,6 +152,7 @@ export default function App() {
   const isAdmin = member.role !== 'member'
   const songId = pathname.match(/^\/songs\/([A-Za-z0-9]+)$/)?.[1]
   const rehearsalId = pathname.match(/^\/rehearsals\/([A-Za-z0-9]+)$/)?.[1]
+  const announcementId = pathname.match(/^\/announcements\/([A-Za-z0-9]+)$/)?.[1]
   // Old bookmarks from before the admin page existed.
   const adminPath = pathname === '/members' ? '/admin/members' : pathname === '/tracker' ? '/admin/tracker' : pathname
   const view = isAdmin && adminPath.startsWith('/admin')
@@ -159,6 +161,10 @@ export default function App() {
       ? 'songs'
     : pathname === '/schedule'
       ? 'schedule'
+    : pathname === '/announcements'
+      ? 'announcements'
+    : announcementId
+      ? 'announcement'
       : pathname === '/privacy'
         ? 'privacy'
         : pathname === '/feedback'
@@ -208,6 +214,7 @@ export default function App() {
           {link('/', 'Home', view === 'home')}
           {link('/songs', 'Songs', view === 'songs' || view === 'song')}
           {link('/schedule', 'Schedule', view === 'schedule' || view === 'rehearsal')}
+          {link('/announcements', 'News', view === 'announcements' || view === 'announcement')}
           {isAdmin && link('/admin', 'Admin', view === 'admin')}
         </nav>
         <a className="signout" href={signOutUrl}>
@@ -221,6 +228,10 @@ export default function App() {
           <Songs navigate={navigate} />
         ) : view === 'schedule' ? (
           <Schedule navigate={navigate} />
+        ) : view === 'announcements' ? (
+          <AnnouncementsPage navigate={navigate} />
+        ) : view === 'announcement' && announcementId ? (
+          <AnnouncementPage key={announcementId} id={announcementId} navigate={navigate} />
         ) : view === 'rehearsal' && rehearsalId ? (
           <RehearsalPage key={rehearsalId} id={rehearsalId} me={member} navigate={navigate} />
         ) : view === 'song' && songId ? (

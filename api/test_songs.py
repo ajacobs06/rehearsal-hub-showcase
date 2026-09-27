@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 from main import app
 from store import (
     InMemoryStore,
+    get_announcement_store,
     get_feedback_store,
     get_group_store,
     get_progress_store,
@@ -34,6 +35,8 @@ def env(monkeypatch: pytest.MonkeyPatch):
     app.dependency_overrides[get_group_store] = lambda: groups
     feedback = InMemoryStore()
     app.dependency_overrides[get_feedback_store] = lambda: feedback
+    announcements = InMemoryStore()
+    app.dependency_overrides[get_announcement_store] = lambda: announcements
     app.dependency_overrides[get_track_store] = lambda: tracks
     yield {
         "members": members,
@@ -42,6 +45,7 @@ def env(monkeypatch: pytest.MonkeyPatch):
         "rehearsals": rehearsals,
         "groups": groups,
         "feedback": feedback,
+        "announcements": announcements,
         "tracks": tracks,
         "admin": add_member(members, "admin@example.com", "admin"),
         "member": add_member(members, "m@example.com", "member"),

@@ -315,6 +315,40 @@ export const groupsApi = {
     request<Group>(`/api/groups/${encodeURIComponent(id)}/members`, { method: 'PUT', body: { memberIds } }),
 }
 
+// ---------- Announcements ----------
+
+export interface Announcement {
+  id: string
+  title: string
+  body: string
+  groups: string[]
+  /** Null once the admin who posted it has left (shown as "Committee"). */
+  authorName: string | null
+  createdAt: string
+  updatedAt: string | null
+}
+
+export interface AnnouncementInput {
+  title?: string
+  body?: string
+  groups?: string[]
+}
+
+export const announcementsApi = {
+  list: (scope: 'mine' | 'all' = 'mine', limit?: number) =>
+    request<Announcement[]>(`/api/announcements?scope=${scope}${limit ? `&limit=${limit}` : ''}`),
+  get: (id: string) => request<Announcement>(`/api/announcements/${encodeURIComponent(id)}`),
+  create: (body: AnnouncementInput) => request<Announcement>('/api/announcements', { method: 'POST', body }),
+  update: (id: string, body: AnnouncementInput) =>
+    request<Announcement>(`/api/announcements/${encodeURIComponent(id)}`, { method: 'PATCH', body }),
+  remove: (id: string) => request<void>(`/api/announcements/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+}
+
+/** "27 September 2026" in UK time. */
+export function formatDay(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: UK })
+}
+
 // ---------- Feedback and your data ----------
 
 export interface FeedbackItem {

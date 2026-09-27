@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { PARTS, api, rehearsalsApi, type Member, type Part, type Rehearsal } from './api'
+import { LatestAnnouncement } from './Announcements'
 import { RehearsalCard, internalLink } from './Rehearsals'
 
 export default function Home({
@@ -33,6 +34,8 @@ export default function Home({
   return (
     <>
       <h1>Hi {firstName}</h1>
+
+      <LatestAnnouncement navigate={navigate} />
 
       <NextRehearsal navigate={navigate} />
 

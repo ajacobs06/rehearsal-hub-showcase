@@ -449,6 +449,34 @@ resource devFeedback 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/contain
   }
 }
 
+resource prodAnnouncements 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-11-15' = {
+  parent: prodDb
+  name: 'announcements'
+  properties: {
+    resource: {
+      id: 'announcements'
+      partitionKey: {
+        paths: ['/id']
+        kind: 'Hash'
+      }
+    }
+  }
+}
+
+resource devAnnouncements 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-11-15' = {
+  parent: devDb
+  name: 'announcements'
+  properties: {
+    resource: {
+      id: 'announcements'
+      partitionKey: {
+        paths: ['/id']
+        kind: 'Hash'
+      }
+    }
+  }
+}
+
 resource appCosmosAccess 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2024-11-15' = {
   parent: cosmos
   name: guid(cosmos.id, site.id, cosmosDataContributor)

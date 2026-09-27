@@ -404,3 +404,55 @@ class FeedbackCreate(Request):
 
 class FeedbackUpdate(Request):
     status: FeedbackStatus
+
+
+# ---------- Announcements ----------
+
+
+class Announcement(BaseModel):
+    id: str
+    title: str = Field(min_length=1, max_length=120)
+    body: str = Field(min_length=1, max_length=5000)
+    groups: list[str] = []  # empty = everyone
+    # The admin who posted it. Both cleared when that member is erased (shown as "Committee").
+    authorId: str | None = None
+    authorName: str | None = None
+    createdAt: str
+    updatedAt: str | None = None
+
+
+class AnnouncementView(BaseModel):
+    """What the API returns: the author's name but not their member id."""
+
+    id: str
+    title: str
+    body: str
+    groups: list[str]
+    authorName: str | None
+    createdAt: str
+    updatedAt: str | None
+
+
+class AnnouncementCreate(Request):
+    title: str = Field(min_length=1, max_length=120)
+    body: str = Field(min_length=1, max_length=5000)
+    groups: list[str] = Field(default_factory=list, max_length=50)
+
+    @field_validator("groups")
+    @classmethod
+    def dedupe_ids(cls, v: list[str]) -> list[str]:
+        return _dedupe(v)
+
+
+class AnnouncementUpdate(Request):
+    title: str | None = Field(default=None, min_length=1, max_length=120)
+    body: str | None = Field(default=None, min_length=1, max_length=5000)
+    groups: list[str] | None = Field(default=None, max_length=50)
+
+    @field_validator("title", "body", "groups")
+    @classmethod
+    def not_null(cls, v):
+        # Omit a field to leave it unchanged.
+        if v is None:
+            raise ValueError("cannot be null")
+        return _dedupe(v) if isinstance(v, list) else v

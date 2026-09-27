@@ -22,6 +22,7 @@ export default function Privacy({ back }: { back: React.ReactNode }) {
         <li>How far you've got with each song (not started, learning, learned or ready).</li>
         <li>Your replies to rehearsals (going, maybe or can't go).</li>
         <li>Any feedback you send through the site.</li>
+        <li>For committee members: your name on announcements you post.</li>
       </ul>
       <p>
         We never see or store your password. Signing in uses one cookie, which is needed for the site to work. There are
@@ -39,6 +40,7 @@ export default function Privacy({ back }: { back: React.ReactNode }) {
       <ul>
         <li>Committee members with admin access can see members' names, emails, parts, groups, progress, replies and feedback.</li>
         <li>Other members only see totals, such as how many people are going to a rehearsal, never your individual details.</li>
+        <li>Members see the name of the committee member who posted each announcement.</li>
         <li>
           Our service providers process it for us: Microsoft Azure stores it in France Central (in the EU) and sends invite emails, and
           Google or Microsoft (Entra External ID, for email and password accounts) handles sign-in.
@@ -61,7 +63,8 @@ export default function Privacy({ back }: { back: React.ReactNode }) {
         We keep your data while you're a member. When you leave, the committee removes your account and everything linked to it.
         If you sign in with an email and password, that sign-in account (held by Microsoft) is deleted at the same time. If you
         create one without being invited, it's deleted as soon as you try to sign in. The committee reviews the member list
-        each September. Deleted data can stay in short-term backups for up to 7 days.
+        each September. Announcements you posted stay up after you leave, signed "Committee" instead of your name. Deleted data
+        can stay in short-term backups for up to 7 days.
       </p>
 
       <h2>Your rights</h2>
