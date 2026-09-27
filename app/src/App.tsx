@@ -105,8 +105,8 @@ export default function App() {
           </div>
           {session.emailSignIn && (
             <p className="muted small">
-              Use the email address you were invited with. First time with email? Choose Sign in with email, then create an
-              account.
+              Use the address you were invited with. Gmail? Sign in with Google. Otherwise choose Sign in with email and
+              create an account the first time. Either way reaches the same account.
             </p>
           )}
           <p className="muted small">Not on the list yet? Ask the committee to invite the email you'll use.</p>

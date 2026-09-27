@@ -105,6 +105,28 @@ def now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+def provider(member_id: str) -> str:
+    return member_id.partition(":")[0]
+
+
+def linked_member(store: DocStore, principal: Principal) -> dict | None:
+    """The same person signing in another way: an active member with this verified email who
+    doesn't have a login from this provider yet (so a member has at most one Google and one email
+    login). Both providers prove the address, the same rule that lets an invite be claimed. A second
+    account from the *same* provider is refused, so it can't take over (see test_identity.py)."""
+    member = next((d for d in store.find("email", principal.email) if d["status"] == "active"), None)
+    if member is None:
+        return None
+    logins = member.get("logins", [])
+    if principal.member_id in logins:
+        return member
+    if provider(principal.member_id) in {provider(i) for i in [member["id"], *logins]}:
+        return None
+    logins = [*logins, principal.member_id]
+    store.patch(member["id"], {("logins",): logins})
+    return {**member, "logins": logins}
+
+
 def current_member(
     principal: Principal | None = Depends(get_principal),
     store: DocStore = Depends(get_store),
@@ -115,7 +137,7 @@ def current_member(
         # Tells the welcome page whether to offer email and password sign-in yet.
         raise HTTPException(401, detail={"reason": "not_signed_in", "emailSignIn": email_sign_in_enabled()})
 
-    existing = store.get(principal.member_id)
+    existing = store.get(principal.member_id) or linked_member(store, principal)
     if existing:
         if "groups" not in existing:
             # Accounts from before groups existed get their groups stored (see member_groups).

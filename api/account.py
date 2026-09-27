@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 
 from auth import current_member, now
-from entra import EntraDirectory, delete_account_of, get_directory
+from entra import EntraDirectory, delete_sign_in_accounts, get_directory
 from models import Member
 from store import DocStore, get_feedback_store, get_progress_store, get_rehearsal_store, get_store
 
@@ -42,7 +42,7 @@ def delete_my_account(
     # The site must always have an owner: hand ownership over first.
     if me.role == "owner":
         raise HTTPException(400, detail={"reason": "owner_must_hand_over"})
-    delete_account_of(me.id, directory)
+    delete_sign_in_accounts([me.id, *me.logins], directory)
     for d in progress.find("memberId", me.id):
         progress.delete(d["id"], partition=d["songId"])
     for r in rehearsals.list_all():

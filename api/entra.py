@@ -91,14 +91,12 @@ def get_directory() -> EntraDirectory:
     return GraphDirectory(tenant, app_client, identity_client)
 
 
-def delete_account_of(member_id: str, directory: EntraDirectory) -> None:
-    """For erasure: delete the member's Entra account before any of our data, so a failure leaves
-    everything in place to retry rather than half-deleted."""
-    oid = entra_object_id(member_id)
-    if oid is None:
-        return
-    try:
-        directory.delete_user(oid)
-    except EntraDeleteFailed as e:
-        log.error("Deleting Entra account %s failed: %s", oid, e)
-        raise HTTPException(502, detail={"reason": "sign_in_account_not_deleted"}) from e
+def delete_sign_in_accounts(member_ids: list[str], directory: EntraDirectory) -> None:
+    """For erasure: delete the member's Entra account (their id or a linked login) before any of our
+    data, so a failure leaves everything in place to retry rather than half-deleted."""
+    for oid in filter(None, map(entra_object_id, member_ids)):
+        try:
+            directory.delete_user(oid)
+        except EntraDeleteFailed as e:
+            log.error("Deleting Entra account %s failed: %s", oid, e)
+            raise HTTPException(502, detail={"reason": "sign_in_account_not_deleted"}) from e

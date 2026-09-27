@@ -23,6 +23,9 @@ class Member(BaseModel):
     status: Status
     groups: list[str] = []
     createdAt: str
+    # Other sign-ins linked by verified email, at most one per provider: e.g. "aad:<oid>" for a
+    # member who first signed in with Google and later used email and password (auth.py).
+    logins: list[str] = []
 
 
 class Request(BaseModel):

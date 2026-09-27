@@ -199,6 +199,74 @@ def test_removing_a_google_member_calls_nothing(directory: FakeDirectory, entra:
     assert directory.deleted == []
 
 
+# ---------- One member, two ways to sign in ----------
+
+
+def test_google_member_can_also_sign_in_with_email(directory: FakeDirectory, entra: InMemoryStore) -> None:
+    owner = add_member(entra, OWNER_EMAIL, "owner")
+    add_member(entra, "jane@gmail.com", "member")
+    for _ in range(2):  # linked on the first sign-in, found again on the next
+        me = client.get("/api/me", headers=entra_principal("jane@gmail.com")).json()
+        assert me["id"] == "google:sub-jane@gmail.com"
+        assert me["logins"] == ["aad:oid-1"]
+    # Still one member, and Google still works.
+    assert client.get("/api/me", headers=principal("jane@gmail.com")).json()["id"] == "google:sub-jane@gmail.com"
+    assert len([m for m in client.get("/api/members", headers=owner).json() if m["email"] == "jane@gmail.com"]) == 1
+    assert directory.deleted == []
+
+
+def test_email_member_can_also_sign_in_with_google(directory: FakeDirectory, entra: InMemoryStore) -> None:
+    invite_and_sign_in(entra, "jane@gmail.com")
+    me = client.get("/api/me", headers=principal("jane@gmail.com")).json()
+    assert (me["id"], me["logins"]) == ("aad:oid-1", ["google:sub-jane@gmail.com"])
+
+
+def test_linked_login_has_the_members_role(directory: FakeDirectory, entra: InMemoryStore) -> None:
+    add_member(entra, OWNER_EMAIL, "owner")
+    assert client.get("/api/me", headers=entra_principal(OWNER_EMAIL)).json()["role"] == "owner"
+
+
+def test_second_account_from_the_same_provider_is_not_linked(directory: FakeDirectory, entra: InMemoryStore) -> None:
+    """At most one login per provider: another Google account, or another email account, with the
+    same address is refused (and a stray email account is deleted)."""
+    add_member(entra, OWNER_EMAIL, "owner")
+    add_member(entra, "jane@gmail.com", "member")
+    assert client.get("/api/me", headers=principal("jane@gmail.com", sub="other-google")).status_code == 403
+    assert client.get("/api/me", headers=entra_principal("jane@gmail.com", oid="oid-1")).status_code == 200
+    res = client.get("/api/me", headers=entra_principal("jane@gmail.com", oid="oid-2"))
+    assert (res.status_code, res.json()["detail"]["reason"]) == (403, "not_invited")
+    assert directory.deleted == ["oid-2"]
+    assert entra.get("google:sub-jane@gmail.com")["logins"] == ["aad:oid-1"]
+
+
+def test_invites_are_not_linked_before_they_are_claimed(directory: FakeDirectory, entra: InMemoryStore) -> None:
+    owner = add_member(entra, OWNER_EMAIL, "owner")
+    client.post("/api/members", headers=owner, json={"email": "new@example.com", "name": "New"})
+    me = client.get("/api/me", headers=entra_principal("new@example.com")).json()
+    assert (me["id"], me["logins"]) == ("aad:oid-1", [])
+
+
+def test_erasure_deletes_a_linked_email_account(directory: FakeDirectory, entra: InMemoryStore) -> None:
+    add_member(entra, OWNER_EMAIL, "owner")
+    member = add_member(entra, "jane@gmail.com", "member")
+    client.get("/api/me", headers=entra_principal("jane@gmail.com"))
+    assert client.get("/api/me/export", headers=member).json()["member"]["logins"] == ["aad:oid-1"]
+    assert client.delete("/api/me", headers=member).status_code == 204
+    assert directory.deleted == ["oid-1"]
+    assert entra.get("google:sub-jane@gmail.com") is None
+
+
+def test_admin_removal_deletes_a_linked_email_account(directory: FakeDirectory, entra: InMemoryStore) -> None:
+    owner = add_member(entra, OWNER_EMAIL, "owner")
+    add_member(entra, "jane@gmail.com", "member")
+    client.get("/api/me", headers=entra_principal("jane@gmail.com"))
+    directory.fail = True
+    assert client.delete("/api/members/google:sub-jane@gmail.com", headers=owner).status_code == 502
+    directory.fail = False
+    assert client.delete("/api/members/google:sub-jane@gmail.com", headers=owner).status_code == 204
+    assert directory.deleted == ["oid-1"]
+
+
 @pytest.mark.parametrize(
     "member_id, oid",
     [("aad:abc", "abc"), ("google:abc", None), ("invite-123", None), ("aad:", None), ("dev:x@y", None)],
