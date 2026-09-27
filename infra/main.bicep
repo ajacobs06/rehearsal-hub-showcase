@@ -30,7 +30,11 @@ param entraTenantId string = ''
 @description('Client ID of the Rehearsal Hub app registration in that external tenant.')
 param entraClientId string = ''
 
+@description('Client ID of the multitenant "Rehearsal Hub account cleanup" app (registered in this subscription\'s tenant, admitted into the Entra External ID tenant with User.DeleteRestore.All). Empty = no automatic deletion.')
+param entraCleanupClientId string = ''
+
 var entraEnabled = !empty(entraTenantId) && !empty(entraClientId)
+var entraCleanupEnabled = entraEnabled && !empty(entraCleanupClientId)
 
 var suffix = uniqueString(resourceGroup().id)
 
@@ -61,8 +65,13 @@ resource site 'Microsoft.Web/sites@2023-12-01' = {
   name: appName
   location: location
   kind: 'app,linux'
+  // System-assigned: Cosmos, Blob and Key Vault. User-assigned: only to delete accounts in the
+  // Entra External ID tenant (a federated credential needs a user-assigned identity).
   identity: {
-    type: 'SystemAssigned'
+    type: 'SystemAssigned, UserAssigned'
+    userAssignedIdentities: {
+      '${graphIdentity.id}': {}
+    }
   }
   properties: {
     serverFarmId: plan.id
@@ -99,6 +108,10 @@ resource appSettings 'Microsoft.Web/sites/config@2023-12-01' = {
     // The API only trusts "aad" sign-ins from this tenant (api/auth.py).
     ENTRA_TENANT_ID: entraTenantId
     MICROSOFT_PROVIDER_AUTHENTICATION_SECRET: '@Microsoft.KeyVault(VaultName=${vault.name};SecretName=entra-client-secret)'
+  } : {}, entraCleanupEnabled ? {
+    // api/entra.py: deletes erased members' and uninvited sign-ups' Entra accounts.
+    ENTRA_CLEANUP_CLIENT_ID: entraCleanupClientId
+    GRAPH_IDENTITY_CLIENT_ID: graphIdentity.properties.clientId
   } : {})
   dependsOn: [appVaultAccess]
 }
@@ -119,6 +132,18 @@ resource ftpPolicy 'Microsoft.Web/sites/basicPublishingCredentialsPolicies@2023-
     allow: false
   }
 }
+
+// ---------- Graph identity (deletes Entra External ID accounts, no stored secret) ----------
+// The "Rehearsal Hub account cleanup" app trusts this identity through a federated credential,
+// and holds only User.DeleteRestore.All in the external tenant.
+
+resource graphIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: 'id-rehearsal-hub-graph'
+  location: location
+}
+
+output graphIdentityPrincipalId string = graphIdentity.properties.principalId
+output graphIdentityClientId string = graphIdentity.properties.clientId
 
 // ---------- Deploy identity (GitHub Actions OIDC, no stored secret) ----------
 // A user-assigned identity instead of an app registration: no secret to rotate. It trusts only

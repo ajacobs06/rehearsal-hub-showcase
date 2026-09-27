@@ -59,7 +59,9 @@ export default function Privacy({ back }: { back: React.ReactNode }) {
       <h2>How long we keep it</h2>
       <p>
         We keep your data while you're a member. When you leave, the committee removes your account and everything linked to it.
-        The committee reviews the member list each September. Deleted data can stay in short-term backups for up to 7 days.
+        If you sign in with an email and password, that sign-in account (held by Microsoft) is deleted at the same time. If you
+        create one without being invited, it's deleted as soon as you try to sign in. The committee reviews the member list
+        each September. Deleted data can stay in short-term backups for up to 7 days.
       </p>
 
       <h2>Your rights</h2>

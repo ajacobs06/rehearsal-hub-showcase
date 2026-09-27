@@ -191,7 +191,9 @@ function MemberRow({
       setError(
         err instanceof ApiError && err.reason === 'owner_only_admin_group'
           ? 'Only owners can change groups with admin access.'
-          : "Couldn't save that change.",
+          : err instanceof ApiError && err.reason === 'sign_in_account_not_deleted'
+            ? "Couldn't delete their email sign-in account, so nothing was removed. Try again."
+            : "Couldn't save that change.",
       )
     } finally {
       setBusy(false)

@@ -8,6 +8,7 @@ from typing import Callable
 
 from fastapi import Depends, HTTPException, Request
 
+from entra import EntraDeleteFailed, EntraDirectory, entra_object_id, get_directory
 from models import ROLE_RANK, Member, Role
 from roles import admin_group_ids, current_role, member_groups
 from store import DocStore, get_group_store, get_store, on_app_service
@@ -108,6 +109,7 @@ def current_member(
     principal: Principal | None = Depends(get_principal),
     store: DocStore = Depends(get_store),
     groups: DocStore = Depends(get_group_store),
+    directory: EntraDirectory = Depends(get_directory),
 ) -> Member:
     if principal is None:
         # Tells the welcome page whether to offer email and password sign-in yet.
@@ -151,6 +153,14 @@ def current_member(
         store.upsert(doc)
         return Member(**doc)
 
+    # An uninvited email-and-password sign-up leaves nothing of theirs in our Entra tenant. If
+    # they're invited later, they sign up again.
+    oid = entra_object_id(principal.member_id)
+    if oid:
+        try:
+            directory.delete_user(oid)
+        except EntraDeleteFailed as e:
+            log.warning("Could not delete uninvited Entra account %s: %s", oid, e)
     raise HTTPException(403, detail={"reason": "not_invited", "email": principal.email})
 
 

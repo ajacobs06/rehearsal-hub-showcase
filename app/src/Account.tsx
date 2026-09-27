@@ -35,7 +35,9 @@ export default function Account({ me, back }: { me: Member; back: React.ReactNod
       setError(
         err instanceof ApiError && err.reason === 'owner_must_hand_over'
           ? 'You own the site. Make someone else an owner (Admin, Members, Groups button), then ask them to remove you.'
-          : "Couldn't delete your account. Try again.",
+          : err instanceof ApiError && err.reason === 'sign_in_account_not_deleted'
+            ? "Couldn't delete your email sign-in account, so nothing was deleted. Try again."
+            : "Couldn't delete your account. Try again.",
       )
       setBusy(false)
     }
@@ -69,8 +71,8 @@ export default function Account({ me, back }: { me: Member; back: React.ReactNod
       <section className="panel">
         <h2>Delete my account</h2>
         <p className="muted small">
-          This removes your account, progress, part choices, rehearsal replies and feedback straight away. You'd need a new
-          invite to come back.
+          This removes your account, progress, part choices, rehearsal replies and feedback straight away, and your email sign-in
+          account if you use one. You'd need a new invite to come back.
         </p>
         {confirming ? (
           <div className="actions">

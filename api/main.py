@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 from account import router as account_router
 from auth import current_member, dev_auth_enabled, easy_auth_enabled, now, require_role
+from entra import EntraDirectory, delete_account_of, get_directory
 from feedback import router as feedback_router
 from mailer import Mailer, get_mailer
 from models import ROLE_RANK, InviteRequest, InviteResponse, MeUpdate, Member, MemberUpdate, Role
@@ -193,6 +194,7 @@ def delete_member(
     rehearsals: DocStore = Depends(get_rehearsal_store),
     feedback: DocStore = Depends(get_feedback_store),
     groups: DocStore = Depends(get_group_store),
+    directory: EntraDirectory = Depends(get_directory),
 ) -> None:
     doc = store.get(member_id)
     if doc is None:
@@ -201,6 +203,7 @@ def delete_member(
         raise HTTPException(400, detail={"reason": "cannot_delete_self"})
     if not can_manage(actor, current_role(doc, admin_group_ids(groups))):
         raise HTTPException(403, detail={"reason": "forbidden"})
+    delete_account_of(member_id, directory)
     for p in progress.find("memberId", member_id):
         progress.delete(p["id"], partition=p["songId"])
     for r in rehearsals.list_all():
