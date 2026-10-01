@@ -109,7 +109,7 @@ export default function SongPage({ id, me, navigate }: { id: string; me: Member;
           <h2>{song.myPart ? 'Other tracks' : 'Tracks'}</h2>
           <ul className="track-list">
             {others.map((k) => (
-              <TrackRow key={k} songId={song.id} kind={k} />
+              <TrackRow key={k} songId={song.id} title={song.title} kind={k} />
             ))}
           </ul>
         </section>
@@ -199,7 +199,7 @@ function PartPanel({
         </>
       ) : track ? (
         <>
-          <Player key={track} songId={song.id} kind={track} label={FILE_LABEL[track]} />
+          <Player key={track} songId={song.id} title={song.title} kind={track} label={FILE_LABEL[track]} />
           <DownloadButton songId={song.id} kind={track} />
         </>
       ) : (
@@ -249,7 +249,7 @@ function ProgressPanel({ song, onChange }: { song: Song; onChange: (s: Song) => 
   )
 }
 
-function TrackRow({ songId, kind }: { songId: string; kind: FileKind }) {
+function TrackRow({ songId, title, kind }: { songId: string; title: string; kind: FileKind }) {
   const [open, setOpen] = useState(false)
   return (
     <li className="track">
@@ -261,7 +261,7 @@ function TrackRow({ songId, kind }: { songId: string; kind: FileKind }) {
       </div>
       {open && (
         <>
-          <Player songId={songId} kind={kind} label={FILE_LABEL[kind]} />
+          <Player songId={songId} title={title} kind={kind} label={FILE_LABEL[kind]} />
           <DownloadButton songId={songId} kind={kind} />
         </>
       )}
