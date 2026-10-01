@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -229,6 +230,20 @@ def delete_member(
 
 # ---------- Front end ----------
 
+# Paths the React app has a page for. Anything else still gets the app (so a mistyped link
+# lands on Home) but with a 404 status: answering 200 for every made-up path (/wp-login.php,
+# /.env) looks evasive to scanners such as Google Safe Browsing.
+APP_ROUTE = re.compile(
+    r"(|privacy|songs|schedule|announcements|feedback|account|members|tracker"
+    r"|(songs|rehearsals|announcements)/[A-Za-z0-9]+"
+    r"|admin(/[A-Za-z0-9_-]+)*)/?"
+)
+
+
+def is_app_route(path: str) -> bool:
+    return APP_ROUTE.fullmatch(path) is not None
+
+
 if STATIC_DIR.is_dir():
     app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
 
@@ -236,7 +251,10 @@ if STATIC_DIR.is_dir():
     def spa(path: str) -> FileResponse:
         if path == "api" or path.startswith("api/"):
             raise HTTPException(status_code=404)
+        # Kept outside .well-known/ because the deploy artifact drops hidden folders.
+        if path == ".well-known/security.txt":
+            path = "security.txt"
         file = (STATIC_DIR / path).resolve()
         if path and file.is_file() and file.is_relative_to(STATIC_DIR):
             return FileResponse(file)
-        return FileResponse(STATIC_DIR / "index.html")
+        return FileResponse(STATIC_DIR / "index.html", status_code=200 if is_app_route(path) else 404)

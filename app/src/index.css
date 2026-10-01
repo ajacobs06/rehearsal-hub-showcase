@@ -1288,6 +1288,13 @@ a.wordmark img {
   min-height: 44px;
 }
 
+.gate-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  column-gap: 1.5rem;
+}
+
 /* Welcome page: anchored near the top (Taste Skill hero top-padding cap), not centred mid-screen. */
 .gate.welcome {
   align-content: start;

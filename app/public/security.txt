@@ -1,0 +1,5 @@
+# Rehearsal Hub, the members' site of the University of Birmingham Barbershop Singing Society.
+Contact: mailto:barbershopsingingsociety@gmail.com
+Expires: 2027-09-30T23:00:00.000Z
+Preferred-Languages: en
+Canonical: https://bss-rehearsal-hub.azurewebsites.net/.well-known/security.txt

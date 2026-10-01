@@ -17,6 +17,38 @@ class NullMailer:
         return False
 
 
+# Replies reach the committee rather than the unattended DoNotReply sender.
+SOCIETY_CONTACT = "barbershopsingingsociety@gmail.com"
+SOCIETY_URL = "https://www.guildofstudents.com/organisation/bss/"
+
+
+def invite_message(sender: str, app_url: str, to: str, name: str, invited_by: str) -> dict:
+    """The invite email. It comes from a generic Azure address with a link to an azurewebsites.net
+    site, which is what phishing looks like, so it says plainly who sent it and why, gives a human
+    to reply to, and never asks for a password by email."""
+    body = (
+        f"Hi {name},\n\n"
+        f"{invited_by} from the committee has added you to Rehearsal Hub, the University of Birmingham "
+        "Barbershop Singing Society's members' site for scores, learning tracks and the rehearsal schedule.\n\n"
+        f"To use it, open {app_url} and sign in with this address ({to}):\n"
+        "- For a Gmail or Google account, choose Sign in with Google.\n"
+        "- For any other address, choose Sign in with email and create an account the first time.\n"
+        "Either way reaches the same account.\n\n"
+        "Not sure this is genuine? Reply to this email to reach the committee, or ask us at rehearsal. "
+        f"About the society: {SOCIETY_URL}\n\n"
+        "If you weren't expecting this, you can ignore it."
+    )
+    return {
+        "senderAddress": sender,
+        "recipients": {"to": [{"address": to}]},
+        "replyTo": [{"address": SOCIETY_CONTACT, "displayName": "Barbershop Singing Society committee"}],
+        "content": {
+            "subject": f"{invited_by} added you to the Barbershop Singing Society's Rehearsal Hub",
+            "plainText": body,
+        },
+    }
+
+
 class AcsMailer:
     def __init__(self, connection_string: str, sender: str, app_url: str) -> None:
         from azure.communication.email import EmailClient
@@ -26,24 +58,8 @@ class AcsMailer:
         self.app_url = app_url
 
     def send_invite(self, to: str, name: str, invited_by: str) -> bool:
-        body = (
-            f"Hi {name},\n\n"
-            f"{invited_by} has invited you to Rehearsal Hub, the UoB Barbershop Singing Society's "
-            "members' site for learning tracks and the rehearsal schedule.\n\n"
-            f"Sign in at {self.app_url} with this address ({to}):\n"
-            "- If it's a Gmail or Google account, choose Sign in with Google.\n"
-            "- Otherwise choose Sign in with email, then Create one, and set a password just for Rehearsal Hub.\n"
-            "You can use either option later; both reach the same account.\n\n"
-            "If you weren't expecting this, you can ignore it."
-        )
         try:
-            poller = self.client.begin_send(
-                {
-                    "senderAddress": self.sender,
-                    "recipients": {"to": [{"address": to}]},
-                    "content": {"subject": "You're invited to Rehearsal Hub", "plainText": body},
-                }
-            )
+            poller = self.client.begin_send(invite_message(self.sender, self.app_url, to, name, invited_by))
             return poller.result(timeout=60).get("status") == "Succeeded"
         except Exception:
             log.exception("Failed to send invite email to %s", to)

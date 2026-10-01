@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ApiError, api, emailSignInUrl, googleSignInUrl, signOutUrl, type Member } from './api'
+import { ApiError, SOCIETY_URL, api, emailSignInUrl, googleSignInUrl, signOutUrl, type Member } from './api'
 
 // The BSS badge, used as-is: never recoloured, stretched or cropped.
 const LOGO = '/bss-logo.png'
@@ -110,10 +110,17 @@ export default function App() {
               create an account the first time. Either way reaches the same account.
             </p>
           )}
-          <p className="muted small">Not on the list yet? Ask the committee to invite the email you'll use.</p>
-          <a className="small text-link" {...internalLink('/privacy', navigate)}>
-            Privacy notice
-          </a>
+          <p className="muted small">
+            Not on the list yet? Ask the committee, who run this site, to invite the email you'll use.
+          </p>
+          <div className="gate-links">
+            <a className="small text-link" href={SOCIETY_URL}>
+              About the society
+            </a>
+            <a className="small text-link" {...internalLink('/privacy', navigate)}>
+              Privacy notice
+            </a>
+          </div>
         </div>
       </main>
     )

@@ -378,6 +378,8 @@ export const accountApi = {
 }
 
 export const PRIVACY_CONTACT = 'barbershopsingingsociety@gmail.com'
+/** The society's public page, linked from the welcome page so visitors can check who runs the site. */
+export const SOCIETY_URL = 'https://www.guildofstudents.com/organisation/bss/'
 
 /** Scores come first (the society rarely uses tracks); mention the member's track when there is one. */
 export function readiness(hasScore: boolean, part: Part | null, hasTrack: boolean): { text: string; ready: boolean } {
