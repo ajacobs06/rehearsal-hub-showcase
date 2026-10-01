@@ -39,7 +39,7 @@ export default function Privacy({ back }: { back: React.ReactNode }) {
       <h2>Who can see it</h2>
       <ul>
         <li>Committee members with admin access can see members' names, emails, parts, groups, progress, replies and feedback.</li>
-        <li>Other members only see totals, such as how many people are going to a rehearsal, never your individual details.</li>
+        <li>Other members never see your details, progress or replies, not even how many people are going to a rehearsal.</li>
         <li>Members see the name of the committee member who posted each announcement.</li>
         <li>
           Our service providers process it for us: Microsoft Azure stores it in France Central (in the EU) and sends invite emails, and

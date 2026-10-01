@@ -375,8 +375,8 @@ class RehearsalView(BaseModel):
     groups: list[str]
     myRsvp: RsvpResponse | None
     rsvpOpen: bool
-    counts: RsvpCounts
     # Admins only:
+    counts: RsvpCounts | None = None
     attendees: list[Attendee] | None = None
     songParts: list[SongParts] | None = None
 

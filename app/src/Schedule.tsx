@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { formatWhen, rehearsalsApi, type Rehearsal } from './api'
-import { RehearsalCard, countsLine, internalLink } from './Rehearsals'
+import { RehearsalCard, internalLink } from './Rehearsals'
 
 export default function Schedule({ navigate }: { navigate: (to: string) => void }) {
   const [upcoming, setUpcoming] = useState<Rehearsal[] | null>(null)
@@ -51,9 +51,7 @@ export default function Schedule({ navigate }: { navigate: (to: string) => void 
               <li key={r.id}>
                 <a {...internalLink(`/rehearsals/${r.id}`, navigate)}>
                   <span className="song-title">{formatWhen(r.start, r.end)}</span>
-                  <span className="muted small">
-                    {r.venue}. {countsLine(r)}
-                  </span>
+                  <span className="muted small">{r.venue}</span>
                 </a>
               </li>
             ))}

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { PARTS, RSVP_OPTIONS, formatWhen, rehearsalsApi, type Member, type Rehearsal, type RsvpResponse } from './api'
-import { ForGroups, RehearsalForm, countsLine, internalLink } from './Rehearsals'
+import { ForGroups, RehearsalForm, internalLink } from './Rehearsals'
 
 type Navigate = (to: string) => void
 
@@ -8,6 +8,17 @@ const PART_COLUMNS: { key: string; label: string }[] = [
   ...PARTS.map((p) => ({ key: p.value, label: p.label })),
   { key: 'none', label: 'No part' },
 ]
+
+/** Reply totals; the API only sends them to admins. */
+function countsLine(r: Rehearsal): string {
+  const c = r.counts
+  if (!c) return ''
+  const parts = [`${c.yes} going`]
+  if (c.maybe) parts.push(`${c.maybe} maybe`)
+  if (c.no) parts.push(`${c.no} can't go`)
+  parts.push(`${c.noReply} no reply`)
+  return parts.join(', ')
+}
 
 /** Admin: every rehearsal (all groups, upcoming and past) and "Add a rehearsal". */
 export function AdminRehearsalList({ me, navigate }: { me: Member; navigate: Navigate }) {
@@ -35,9 +46,7 @@ export function AdminRehearsalList({ me, navigate }: { me: Member; navigate: Nav
         <span className="song-title">{formatWhen(r.start, r.end)}</span>
         <span className="muted small">{r.venue}</span>
         <ForGroups ids={r.groups} />
-        <span className="small">
-          {countsLine(r)}, {r.counts.noReply} no reply
-        </span>
+        <span className="small">{countsLine(r)}</span>
       </a>
     </li>
   )
@@ -133,9 +142,7 @@ export function AdminRehearsalDetail({ id, me, navigate }: { id: string; me: Mem
         <h2 className="detail-title">{formatWhen(r.start, r.end)}</h2>
         <p className="muted">{r.venue}</p>
         <ForGroups ids={r.groups} />
-        <p className="small">
-          {countsLine(r)}, {r.counts.noReply} no reply
-        </p>
+        <p className="small">{countsLine(r)}</p>
       </div>
       {r.songParts && r.songParts.length > 0 && <PartNumbers r={r} />}
       {r.attendees && <Replies r={r} />}

@@ -74,20 +74,6 @@ def build_view(
         for s in plan
     ]
 
-    # Only the rehearsal's audience counts (everyone, or the members of its groups).
-    active = [
-        m
-        for m in (Member(**d) for d in members.list_all() if d["status"] == "active")
-        if not r.groups or set(r.groups) & set(m.groups)
-    ]
-    counts = RsvpCounts()
-    for m in active:
-        rsvp = r.rsvps.get(m.id)
-        if rsvp is None:
-            counts.noReply += 1
-        else:
-            setattr(counts, rsvp.response, getattr(counts, rsvp.response) + 1)
-
     view = RehearsalView(
         id=r.id,
         start=r.start,
@@ -98,9 +84,22 @@ def build_view(
         groups=r.groups,
         myRsvp=r.rsvps[me.id].response if me.id in r.rsvps else None,
         rsvpOpen=utcnow() < finishes(r),
-        counts=counts,
     )
+    # Everything about other members' replies, even totals, is for admins only.
     if admin:
+        # Only the rehearsal's audience counts (everyone, or the members of its groups).
+        active = [
+            m
+            for m in (Member(**d) for d in members.list_all() if d["status"] == "active")
+            if not r.groups or set(r.groups) & set(m.groups)
+        ]
+        view.counts = RsvpCounts()
+        for m in active:
+            rsvp = r.rsvps.get(m.id)
+            if rsvp is None:
+                view.counts.noReply += 1
+            else:
+                setattr(view.counts, rsvp.response, getattr(view.counts, rsvp.response) + 1)
         view.attendees = sorted(
             (
                 Attendee(

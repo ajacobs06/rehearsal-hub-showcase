@@ -139,12 +139,25 @@ def test_rsvp_rejects_bad_input(env, body: dict) -> None:
     assert env["rehearsals"].get(r["id"])["rsvps"] == {}
 
 
-def test_members_see_totals_but_not_names(env) -> None:
+def test_members_see_only_their_own_reply(env) -> None:
+    r = make_rehearsal(env)
+    rsvp(env, r["id"], "yes", who="admin")
+    rsvp(env, r["id"], "maybe")
+    views = [
+        client.get(f"/api/rehearsals/{r['id']}", headers=env["member"]).json(),
+        client.get("/api/rehearsals", headers=env["member"]).json()[0],
+        rsvp(env, r["id"], "yes").json(),
+    ]
+    for view in views:
+        assert view["counts"] is None and view["attendees"] is None and view["songParts"] is None
+    assert views[1]["myRsvp"] == "maybe" and views[2]["myRsvp"] == "yes"
+
+
+def test_admin_sees_totals(env) -> None:
     r = make_rehearsal(env)
     rsvp(env, r["id"], "yes")
-    view = client.get(f"/api/rehearsals/{r['id']}", headers=env["member"]).json()
+    view = client.get(f"/api/rehearsals/{r['id']}", headers=env["admin"]).json()
     assert view["counts"] == {"yes": 1, "maybe": 0, "no": 0, "noReply": 1}
-    assert view["attendees"] is None and view["songParts"] is None
 
 
 def test_admin_sees_attendees_and_parts_by_song(env) -> None:

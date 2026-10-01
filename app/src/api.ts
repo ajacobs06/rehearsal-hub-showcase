@@ -269,7 +269,8 @@ export interface Rehearsal {
   }[]
   myRsvp: RsvpResponse | null
   rsvpOpen: boolean
-  counts: { yes: number; maybe: number; no: number; noReply: number }
+  // Admins only:
+  counts: { yes: number; maybe: number; no: number; noReply: number } | null
   attendees: { memberId: string; name: string; part: Part | null; response: RsvpResponse | null }[] | null
   songParts: { songId: string; title: string; parts: Record<string, { yes: number; maybe: number }> }[] | null
 }

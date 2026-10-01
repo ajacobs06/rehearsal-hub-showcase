@@ -27,13 +27,6 @@ export function internalLink(to: string, navigate: Navigate) {
   }
 }
 
-export function countsLine(r: Rehearsal): string {
-  const parts = [`${r.counts.yes} going`]
-  if (r.counts.maybe) parts.push(`${r.counts.maybe} maybe`)
-  if (r.counts.no) parts.push(`${r.counts.no} can't go`)
-  return parts.join(', ')
-}
-
 export function RsvpButtons({ r, onChange }: { r: Rehearsal; onChange: (r: Rehearsal) => void }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(false)
@@ -128,7 +121,6 @@ export function RehearsalCard({
       ) : (
         r.songs.length > 0 && <p className="small">{r.songs.map((s) => s.title).join(', ')}</p>
       )}
-      <p className="muted small">{countsLine(r)}</p>
       <RsvpButtons r={r} onChange={onChange} />
     </article>
   )

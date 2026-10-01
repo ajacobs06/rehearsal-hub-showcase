@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { formatWhen, rehearsalsApi, type Member, type Rehearsal } from './api'
-import { ForGroups, RsvpButtons, SongsToPrepare, countsLine, internalLink } from './Rehearsals'
+import { ForGroups, RsvpButtons, SongsToPrepare, internalLink } from './Rehearsals'
 
 
 export default function RehearsalPage({ id, me, navigate }: { id: string; me: Member; navigate: (to: string) => void }) {
@@ -60,7 +60,6 @@ export default function RehearsalPage({ id, me, navigate }: { id: string; me: Me
       <section className="panel">
         <h2>Are you coming?</h2>
         <RsvpButtons r={r} onChange={setR} />
-        <p className="muted small hint-below">{countsLine(r)}</p>
       </section>
 
       <section>
