@@ -5,8 +5,8 @@ blobs get new ETags, and the API refuses links to a file whose ETag differs from
 when it passed the upload checks, so each song's `files.<kind>.etag` is rewritten to the new blob's.
 Safe to re-run: blobs are overwritten and documents upserted (in that order, so ETags always match).
 
-Needs `az login` to both tenants, and temporary data roles for you on both sides (see
-infra/MIGRATION.md). Run from api/ so the Azure SDKs from requirements.txt are available:
+Needs `az login` to both tenants, and temporary data roles for you on both sides (runbook
+kept private). Run from api/ so the Azure SDKs from requirements.txt are available:
 
     cd api && .venv/bin/python ../infra/migrate_tenant.py --dry-run \\
         --src-subscription <old subscription id> --src-cosmos https://<old>.documents.azure.com:443/ \\

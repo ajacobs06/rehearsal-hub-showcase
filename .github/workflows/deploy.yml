@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 env:
-  # Repo variable, set with the other AZURE_* ones (the web app's name in infra/main.bicepparam).
+  # Repo variable, set with the other AZURE_* ones (the web app's name, the appName Bicep param).
   AZURE_WEBAPP_NAME: ${{ vars.AZURE_WEBAPP_NAME }}
 
 jobs:
@@ -72,7 +72,8 @@ jobs:
             !api/.venv
 
   deploy:
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    # Only the private source repo deploys; public copies just build and test.
+    if: github.repository == 'ajacobs06/rehearsal-hub' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
     environment:

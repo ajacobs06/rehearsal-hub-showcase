@@ -55,3 +55,7 @@ security-audit/
 # Publish profiles contain deploy credentials
 *.PublishSettings
 *.publishsettings
+
+# Real deployment parameters (see infra/main.example.bicepparam)
+infra/main.bicepparam
+CLAUDE.md

@@ -1,5 +1,6 @@
 // Rehearsal Hub infrastructure. Deploy:
 //   az deployment group create -g rg-rehearsal-hub -f infra/main.bicep -p infra/main.bicepparam
+//   (main.bicepparam is not published; start from infra/main.example.bicepparam)
 // App settings are owned here: a redeploy replaces the full set, so never add settings by hand.
 // Secrets live in Key Vault and are referenced from app settings.
 
