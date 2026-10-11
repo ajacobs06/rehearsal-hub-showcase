@@ -44,9 +44,9 @@ azure-cosmos==4.17.1 \
     --hash=sha256:a33b796d055d1923b6dc7b6195aa1cfb5ae786dbc38771bb4ad702b0e5ec18db \
     --hash=sha256:d692928a54d88163e96d41d8f899229ca2f6a6bf21973ece2bfc1f72d4b4edd8
     # via -r requirements.in
-azure-identity==1.25.3 \
-    --hash=sha256:ab23c0d63015f50b630ef6c6cf395e7262f439ce06e5d07a64e874c724f8d9e6 \
-    --hash=sha256:f4d0b956a8146f30333e071374171f3cfa7bdb8073adb8c3814b65567aa7447c
+azure-identity==1.26.0 \
+    --hash=sha256:3c60d9682b3ac01507388d474cb5a5ffbe54152a96b6cdcaa7013da9315cf186 \
+    --hash=sha256:61b4538b87df10d2d6d44b77cd5ea28a8929fd4929d58b45bf3f230f7daba02e
     # via
     #   -r requirements.in
     #   azure-monitor-opentelemetry-exporter
@@ -58,9 +58,9 @@ azure-monitor-opentelemetry-exporter==1.0.0b57 \
     --hash=sha256:55c9e2ff5db5406307cfe15090c749524b53769026ec588ed96611547f53d551 \
     --hash=sha256:7489a8a8b7a9cfcbf8476808e1921f4b646dc18aa143aa24d442d344e4d067ec
     # via azure-monitor-opentelemetry
-azure-storage-blob==12.30.3 \
-    --hash=sha256:31760221ceff36b7ceed741ba0093d08ec857911b92294dce3e4efe8fa40245e \
-    --hash=sha256:80729a5397e5f0a63dbbdff74da675c5db1eacaf25fd5db0074b7ba6c17e2498
+azure-storage-blob==12.31.0 \
+    --hash=sha256:0c0cb601d3462491d09ea96023cd791bb9dd4b173bf950daf3cff34ff47ba5b5 \
+    --hash=sha256:997b393cfcbdc4b186d5911790d91f80387f7edc12c4d73eab963a2d26e5b2a9
     # via -r requirements.in
 certifi==2026.7.22 \
     --hash=sha256:62f22742b58a1a33014a2b6b706588a8d7e2a88ae7bd1a6ebe8c992928483775 \
@@ -408,9 +408,9 @@ email-validator==2.3.0 \
     --hash=sha256:80f13f623413e6b197ae73bb10bf4eb0908faf509ad8362c5edeb0be7fd450b4 \
     --hash=sha256:9fc05c37f2f6cf439ff414f8fc46d917929974a82244c20eb10231ba60c54426
     # via -r requirements.in
-fastapi==0.141.1 \
-    --hash=sha256:bfb91aa2d334c61cb35ba9a116fc123b3d3df31640b801cf57a7a78ec3f603b3 \
-    --hash=sha256:e8822fc40db1e1858054d7a949a888695bc9bdce70139178e33bd2871a453ca1
+fastapi==0.143.0 \
+    --hash=sha256:1acffe48206a80917cf7dac21992b5c44b25384e8902bf745c1fd9dabcf6c51f \
+    --hash=sha256:3e9395fd35276425b61b516a31fdd7c77fe2af83e41b4da22e30696fb1304c5d
     # via -r requirements.in
 gunicorn==26.2.0 \
     --hash=sha256:62b864895d9ebff0b2f9867ba04fe811c93121596540830c9c916d0769668447 \
@@ -458,6 +458,7 @@ opentelemetry-api==1.44.0 \
     # via
     #   azure-core-tracing-opentelemetry
     #   azure-monitor-opentelemetry-exporter
+    #   fastapi
     #   opentelemetry-instrumentation
     #   opentelemetry-instrumentation-asgi
     #   opentelemetry-instrumentation-dbapi
